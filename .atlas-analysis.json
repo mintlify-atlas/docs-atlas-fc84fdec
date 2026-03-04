@@ -1,0 +1,153 @@
+{
+  "projectType": "saas",
+  "projectName": "DitzlerTotes",
+  "projectDescription": "Full-stack tote container management system with complete traceability, centralized auditing, and role-based access control for production environments.",
+  "theme": "aspen",
+  "primaryColor": "#6c757d",
+  "lightColor": "#17a2b8",
+  "darkColor": "#343a40",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/roles-and-permissions",
+              "concepts/multi-role-support",
+              "concepts/tote-lifecycle"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/dashboard",
+              "features/user-management",
+              "features/client-management",
+              "features/tote-management",
+              "features/products-and-locations",
+              "features/operator-interfaces",
+              "features/audit-system"
+            ]
+          },
+          {
+            "group": "Operator Guides",
+            "pages": [
+              "operators/filling-operator",
+              "operators/tote-operator",
+              "operators/dispatch-operator"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment-variables",
+              "configuration/database-setup",
+              "configuration/security",
+              "configuration/user-preferences"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "operations/maintenance",
+              "operations/monitoring",
+              "operations/backup-and-recovery"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication",
+              "api/error-handling"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/auth",
+              "api/dashboard",
+              "api/users",
+              "api/clients",
+              "api/totes",
+              "api/products",
+              "api/locations",
+              "api/events",
+              "api/movements"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Database",
+        "groups": [
+          {
+            "group": "Schema",
+            "pages": [
+              "database/schema-overview",
+              "database/tables",
+              "database/stored-procedures",
+              "database/functions"
+            ]
+          },
+          {
+            "group": "Migrations",
+            "pages": [
+              "database/migration-guide",
+              "database/version-history"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-role authentication system with granular permissions",
+    "Real-time dashboard with KPIs and metrics",
+    "Complete tote lifecycle management with state tracking",
+    "Specialized operator interfaces for filling, dispatch, and tote operations",
+    "Centralized audit system with IP tracking and user agent logging",
+    "Product and location catalog management",
+    "Movement history and traceability",
+    "Customizable user preferences and menu ordering",
+    "Alert system for expiration dates and critical events",
+    "Data export functionality for records and reports"
+  ],
+  "publicApiSurface": [
+    "POST /api/login - User authentication",
+    "POST /api/logout - Session termination",
+    "GET /api/dashboard/stats - Dashboard statistics",
+    "GET /api/totes - List all totes",
+    "POST /api/admin/totes - CRUD operations for totes",
+    "PUT /api/totes/mover - Move tote to new location",
+    "PUT /api/operador/totes/update-status - Update tote status",
+    "GET /api/clientes - List clients",
+    "POST /api/admin/clientes - CRUD operations for clients",
+    "POST /api/admin/users - User management",
+    "GET /api/productos - List products",
+    "POST /api/admin/productos - CRUD operations for products",
+    "GET /api/ubicaciones - List locations",
+    "POST /api/admin/ubicaciones - CRUD operations for locations",
+    "GET /api/eventos - Audit event logs",
+    "GET /api/movimientos - Movement history",
+    "GET /api/alertas - Active alerts",
+    "GET /api/user/preferences - User preferences",
+    "PUT /api/user/preferences - Update preferences"
+  ]
+}
