@@ -157,7 +157,7 @@ npm run dev
 You should see:
 
 ```
-🚀 Servidor DitzlerTotesDB ejecutándose en http://localhost:3003
+🚀 Servidor DitzlerTotesDB ejecutándose en http://localhost:3000
 📦 Arquitectura modular activa (Fase 1 completada)
 📁 Módulos migrados: Auth, Totes, Users, Clients, Products, Locations
 ```
@@ -169,13 +169,13 @@ You should see:
 Test the database connection:
 
 ```bash
-curl http://localhost:3003/api/test-db-connection
+curl http://localhost:3000/api/test-db-connection
 ```
 
 Test the audit system:
 
 ```bash
-curl http://localhost:3003/api/test-audit
+curl http://localhost:3000/api/test-audit
 ```
 
 Both endpoints should return successful responses.
@@ -189,7 +189,7 @@ Both endpoints should return successful responses.
 Once the server is running, open your browser and navigate to:
 
 ```
-http://localhost:3003
+http://localhost:3000
 ```
 
 You'll see the login page. Use these default credentials:
@@ -283,7 +283,7 @@ You can test the REST API endpoints using curl or any HTTP client:
 ### Login
 
 ```bash
-curl -X POST http://localhost:3003/api/login \
+curl -X POST http://localhost:3000/api/login \
   -H "Content-Type: application/json" \
   -d '{"email": "admin@ditzler.com", "password": "admin123"}'
 ```
@@ -291,19 +291,19 @@ curl -X POST http://localhost:3003/api/login \
 ### Get dashboard statistics
 
 ```bash
-curl http://localhost:3003/api/dashboard/stats
+curl http://localhost:3000/api/dashboard/stats
 ```
 
 ### List totes
 
 ```bash
-curl http://localhost:3003/api/totes
+curl http://localhost:3000/api/totes
 ```
 
 ### Get active alerts
 
 ```bash
-curl http://localhost:3003/api/alertas
+curl http://localhost:3000/api/alertas
 ```
 
 ## Common configuration

@@ -389,7 +389,7 @@ npm start
 You should see:
 
 ```
-🚀 Servidor DitzlerTotesDB ejecutándose en http://localhost:3003
+🚀 Servidor DitzlerTotesDB ejecutándose en http://localhost:3000
 📦 Arquitectura modular activa (Fase 1 completada)
 📁 Módulos migrados: Auth, Totes, Users, Clients, Products, Locations
 ```
@@ -397,7 +397,7 @@ You should see:
 Test the database connection:
 
 ```bash
-curl http://localhost:3003/api/test-db-connection
+curl http://localhost:3000/api/test-db-connection
 ```
 
 Expected response:
@@ -411,13 +411,13 @@ Expected response:
 Test the audit system:
 
 ```bash
-curl http://localhost:3003/api/test-audit
+curl http://localhost:3000/api/test-audit
 ```
 
 Test authentication:
 
 ```bash
-curl -X POST http://localhost:3003/api/login \
+curl -X POST http://localhost:3000/api/login \
   -H "Content-Type: application/json" \
   -d '{"email": "admin@ditzler.com", "password": "admin123"}'
 ```
@@ -553,7 +553,7 @@ server {
     server_name your-domain.com;
 
     location / {
-        proxy_pass http://localhost:3003;
+        proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
