@@ -1,0 +1,406 @@
+---
+title: System Maintenance Procedures
+description: Comprehensive guide for maintaining the DitzlerTotes system including database maintenance, dependency updates, and preventive care
+---
+
+## Overview
+
+Proper system maintenance ensures optimal performance, security, and reliability of the DitzlerTotes platform. This guide covers routine maintenance tasks, database optimization, and system health checks.
+
+<Info>
+Schedule regular maintenance windows during off-peak hours to minimize disruption to operations.
+</Info>
+
+## Database Maintenance
+
+### Database Integrity Checks
+
+Regularly verify the integrity of the SQL Server database to prevent data corruption:
+
+```sql
+-- Verify database integrity
+DBCC CHECKDB('Ditzler')
+```
+
+**Recommended Schedule:** Weekly during off-peak hours
+
+### Event Log Cleanup
+
+The system automatically logs all events to the `EVENTOS` table. Clean up old events periodically to maintain performance:
+
+```sql
+-- Clean events older than 365 days
+EXEC SP_LimpiarEventosAntiguos @diasAntiguedad = 365
+```
+
+<Warning>
+Ensure compliance with your organization's data retention policies before deleting audit logs.
+</Warning>
+
+### Index Maintenance
+
+The DitzlerTotes database includes 39+ indexes across 7 tables. Regular index maintenance improves query performance:
+
+```sql
+-- Rebuild fragmented indexes
+ALTER INDEX ALL ON Usuarios REBUILD;
+ALTER INDEX ALL ON Clientes REBUILD;
+ALTER INDEX ALL ON Totes REBUILD;
+ALTER INDEX ALL ON LLENADOS_TOTES REBUILD;
+ALTER INDEX ALL ON EVENTOS REBUILD;
+ALTER INDEX ALL ON Productos REBUILD;
+ALTER INDEX ALL ON Ubicaciones REBUILD;
+
+-- Update statistics for better query optimization
+UPDATE STATISTICS Usuarios;
+UPDATE STATISTICS Clientes;
+UPDATE STATISTICS Totes;
+UPDATE STATISTICS EVENTOS;
+```
+
+**Recommended Schedule:** Monthly
+
+### Database Size Monitoring
+
+Monitor database growth to plan for capacity:
+
+```sql
+-- Check database size
+SELECT 
+    DB_NAME(database_id) AS DatabaseName,
+    (size * 8.0 / 1024) AS SizeMB
+FROM sys.master_files
+WHERE database_id = DB_ID('Ditzler');
+
+-- Check table sizes
+SELECT 
+    t.NAME AS TableName,
+    s.Name AS SchemaName,
+    p.rows AS RowCounts,
+    SUM(a.total_pages) * 8 AS TotalSpaceKB, 
+    SUM(a.used_pages) * 8 AS UsedSpaceKB
+FROM sys.tables t
+INNER JOIN sys.indexes i ON t.OBJECT_ID = i.object_id
+INNER JOIN sys.partitions p ON i.object_id = p.OBJECT_ID AND i.index_id = p.index_id
+INNER JOIN sys.allocation_units a ON p.partition_id = a.container_id
+LEFT OUTER JOIN sys.schemas s ON t.schema_id = s.schema_id
+WHERE t.NAME IN ('Usuarios', 'Clientes', 'Totes', 'EVENTOS', 'LLENADOS_TOTES', 'Productos', 'Ubicaciones')
+GROUP BY t.Name, s.Name, p.Rows
+ORDER BY TotalSpaceKB DESC;
+```
+
+## Application Maintenance
+
+### Dependency Updates
+
+Keep dependencies up-to-date to patch security vulnerabilities and improve performance.
+
+#### Security Audit
+
+```bash
+# Check for security vulnerabilities
+npm audit
+
+# Automatically fix vulnerabilities (test in staging first)
+npm audit fix
+
+# For breaking changes, review and update manually
+npm audit fix --force
+```
+
+**Recommended Schedule:** Weekly
+
+#### Updating Dependencies
+
+<Tabs>
+  <Tab title="Production Dependencies">
+    ```bash
+    # Update all dependencies
+    npm update
+    
+    # Update specific packages
+    npm update express mssql helmet
+    
+    # Check for outdated packages
+    npm outdated
+    ```
+  </Tab>
+  <Tab title="Major Version Updates">
+    ```bash
+    # Install npm-check-updates globally
+    npm install -g npm-check-updates
+    
+    # Check for major version updates
+    ncu
+    
+    # Update package.json
+    ncu -u
+    
+    # Install new versions
+    npm install
+    ```
+  </Tab>
+</Tabs>
+
+### Current Dependency Versions
+
+| Package | Current Version | Purpose |
+|---------|----------------|----------|
+| express | 5.1.0 | Web framework |
+| mssql | 11.0.1 | SQL Server client |
+| helmet | 8.1.0 | Security headers |
+| bcrypt | 6.0.0 | Password hashing |
+| express-rate-limit | 8.2.1 | Rate limiting |
+| express-session | 1.18.2 | Session management |
+| dotenv | 17.2.3 | Environment variables |
+| jsonwebtoken | 9.0.3 | JWT tokens |
+
+<Warning>
+Always test dependency updates in a staging environment before deploying to production.
+</Warning>
+
+### Log File Management
+
+Manage server logs to prevent disk space issues:
+
+```bash
+# Check log file sizes
+du -sh logs/
+
+# Archive logs older than 30 days
+find logs/ -name "*.log" -mtime +30 -exec gzip {} \;
+
+# Remove compressed logs older than 90 days
+find logs/ -name "*.log.gz" -mtime +90 -delete
+```
+
+### Session Storage Cleanup
+
+If using file-based sessions, periodically clean up expired session files:
+
+```bash
+# Remove expired session files (if using file store)
+find sessions/ -name "sess_*" -mtime +7 -delete
+```
+
+## System Optimization
+
+### Node.js Performance
+
+#### Memory Management
+
+```bash
+# Start server with increased memory limit (if needed)
+node --max-old-space-size=4096 server.js
+```
+
+#### Process Monitoring
+
+```bash
+# Check Node.js process status
+ps aux | grep node
+
+# Monitor memory usage
+top -p $(pgrep -f "node server.js")
+```
+
+### Connection Pool Optimization
+
+The system uses a connection pool for database connections. Monitor pool usage:
+
+```javascript
+// In your monitoring script
+const { getPool } = require('./config/database');
+
+setInterval(async () => {
+  const pool = await getPool();
+  console.log('Connection Pool Stats:', {
+    size: pool.size,
+    available: pool.available,
+    pending: pool.pending,
+    borrowed: pool.borrowed
+  });
+}, 60000); // Every minute
+```
+
+## Preventive Maintenance
+
+### Weekly Tasks
+
+<Steps>
+  <Step title="Security Audit">
+    Run `npm audit` to check for vulnerabilities
+  </Step>
+  <Step title="Database Integrity">
+    Execute `DBCC CHECKDB('Ditzler')`
+  </Step>
+  <Step title="Review System Logs">
+    Check application logs for errors and warnings
+  </Step>
+  <Step title="Monitor Disk Space">
+    Ensure adequate disk space for database and logs
+  </Step>
+</Steps>
+
+### Monthly Tasks
+
+<Steps>
+  <Step title="Index Maintenance">
+    Rebuild fragmented indexes and update statistics
+  </Step>
+  <Step title="Archive Old Logs">
+    Compress and archive logs older than 30 days
+  </Step>
+  <Step title="Review Event Logs">
+    Analyze audit logs for unusual patterns
+  </Step>
+  <Step title="Backup Verification">
+    Test backup restoration process
+  </Step>
+</Steps>
+
+### Quarterly Tasks
+
+<Steps>
+  <Step title="Dependency Updates">
+    Update all dependencies to latest stable versions
+  </Step>
+  <Step title="Database Cleanup">
+    Execute `SP_LimpiarEventosAntiguos` to remove old events
+  </Step>
+  <Step title="Performance Review">
+    Analyze system performance metrics and optimize
+  </Step>
+  <Step title="Security Review">
+    Review user access, roles, and permissions
+  </Step>
+</Steps>
+
+## Maintenance Scripts
+
+### Automated Maintenance Script
+
+Create a maintenance script to automate routine tasks:
+
+```javascript
+// maintenance/daily-maintenance.js
+const { getPool } = require('../config/database');
+
+async function runDailyMaintenance() {
+  console.log('Starting daily maintenance...');
+  
+  try {
+    const pool = await getPool();
+    
+    // Check database connection
+    await pool.request().query('SELECT 1');
+    console.log('✓ Database connection verified');
+    
+    // Update statistics on frequently queried tables
+    await pool.request().query('UPDATE STATISTICS Totes');
+    await pool.request().query('UPDATE STATISTICS EVENTOS');
+    console.log('✓ Statistics updated');
+    
+    // Get event log size
+    const result = await pool.request().query(
+      'SELECT COUNT(*) as total FROM EVENTOS'
+    );
+    console.log(`✓ Event log size: ${result.recordset[0].total} records`);
+    
+    console.log('Daily maintenance completed successfully');
+  } catch (error) {
+    console.error('Maintenance failed:', error);
+    process.exit(1);
+  }
+}
+
+runDailyMaintenance();
+```
+
+Schedule with cron:
+
+```bash
+# Run daily at 2 AM
+0 2 * * * cd /path/to/DitzlerTotes && node maintenance/daily-maintenance.js >> logs/maintenance.log 2>&1
+```
+
+## Troubleshooting Common Issues
+
+### High Memory Usage
+
+<AccordionGroup>
+  <Accordion title="Symptoms">
+    - Server becomes unresponsive
+    - Out of memory errors
+    - Slow query performance
+  </Accordion>
+  <Accordion title="Solutions">
+    1. Restart the Node.js server
+    2. Check for memory leaks in application code
+    3. Increase Node.js heap size
+    4. Optimize database queries
+    5. Review connection pool settings
+  </Accordion>
+</AccordionGroup>
+
+### Database Connection Issues
+
+<AccordionGroup>
+  <Accordion title="Symptoms">
+    - Connection timeout errors
+    - Too many connections error
+    - Slow database response
+  </Accordion>
+  <Accordion title="Solutions">
+    1. Verify SQL Server is running
+    2. Check connection pool configuration
+    3. Verify network connectivity
+    4. Review SQL Server max connections setting
+    5. Check for long-running queries blocking connections
+  </Accordion>
+</AccordionGroup>
+
+### Disk Space Issues
+
+<AccordionGroup>
+  <Accordion title="Symptoms">
+    - Database write failures
+    - Log file write errors
+    - System instability
+  </Accordion>
+  <Accordion title="Solutions">
+    1. Clean up old event logs using `SP_LimpiarEventosAntiguos`
+    2. Archive and compress old log files
+    3. Move backups to external storage
+    4. Increase disk capacity
+    5. Implement log rotation
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Test Before Production" icon="flask">
+    Always test maintenance procedures in a staging environment first
+  </Card>
+  <Card title="Document Changes" icon="file-lines">
+    Keep detailed records of all maintenance activities
+  </Card>
+  <Card title="Schedule Strategically" icon="calendar">
+    Perform maintenance during off-peak hours
+  </Card>
+  <Card title="Monitor Proactively" icon="chart-line">
+    Set up alerts for system health indicators
+  </Card>
+</CardGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Monitoring" icon="monitor-waveform" href="/operations/monitoring">
+    Learn about system monitoring and health checks
+  </Card>
+  <Card title="Backup & Recovery" icon="database" href="/operations/backup-and-recovery">
+    Database backup and disaster recovery procedures
+  </Card>
+</CardGroup>

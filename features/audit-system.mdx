@@ -1,0 +1,535 @@
+---
+title: Audit system
+description: Centralized logging with IP tracking, user agent capture, and complete traceability
+---
+
+The DitzlerTotes audit system provides comprehensive tracking of all operations, user actions, and system events for compliance, security, and debugging.
+
+## Overview
+
+Every significant action in the system is automatically logged to the `Eventos` table, creating a complete audit trail that can be queried, filtered, and analyzed.
+
+<CardGroup cols={2}>
+  <Card title="Automatic Logging" icon="robot">
+    All CRUD operations logged automatically
+  </Card>
+  <Card title="User Tracking" icon="user">
+    Track which user performed each action
+  </Card>
+  <Card title="IP & User Agent" icon="globe">
+    Capture network information for security
+  </Card>
+  <Card title="Before/After Values" icon="code-compare">
+    Store complete change history
+  </Card>
+</CardGroup>
+
+## Audit Architecture
+
+### Middleware Integration
+
+The audit system is implemented as Express middleware in `middleware/audit.js`:
+
+```javascript
+// Applied globally to all requests
+app.use(auditLogger.auditMiddleware());
+
+// Attaches audit context to each request
+req.audit = {
+  clientInfo: { ip, userAgent },
+  sessionId: 'sess_...',
+  startTime: Date.now()
+};
+```
+
+### Event Types
+
+The system tracks eight event types:
+
+| Type | Description | Example |
+|------|-------------|--------|
+| **Creacion** | New record created | New tote, user, or client |
+| **Actualizacion** | Record updated | Tote moved, status changed |
+| **Eliminacion** | Record deleted | User or client deleted |
+| **Login** | User logged in | Successful authentication |
+| **Logout** | User logged out | Session terminated |
+| **Error** | System error occurred | Database connection failed |
+| **Alerta** | Critical warning | Tote expiration alert |
+| **Configuracion** | Settings changed | Preferences updated |
+
+## Event Data Model
+
+Events are stored in the `Eventos` table:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| **Id** | int | Primary key |
+| **ToteId** | int | Related tote (if applicable) |
+| **TipEvento** | nvarchar(50) | Event type |
+| **Descripcion** | nvarchar(500) | Human-readable description |
+| **Usuario** | nvarchar(255) | User who performed action |
+| **FechaEvento** | datetime | Event timestamp |
+| **DatosAdicionales** | nvarchar(MAX) | JSON with detailed data |
+| **IpAddress** | nvarchar(45) | Client IP address |
+| **UserAgent** | nvarchar(500) | Browser/client identifier |
+| **Severidad** | nvarchar(20) | Debug/Info/Warning/Error/Critical |
+| **Modulo** | nvarchar(50) | System module |
+| **Accion** | nvarchar(100) | Specific action |
+| **ResultadoExitoso** | bit | Success/failure flag |
+| **TiempoEjecucion** | int | Operation duration (ms) |
+| **SessionId** | nvarchar(100) | Session identifier |
+
+## Automatic Logging
+
+### CRUD Operations
+
+All create, update, and delete operations are automatically logged:
+
+```javascript
+// From services/totes.service.js
+async function create(toteData, req) {
+  // Create tote...
+  
+  // Audit automatically
+  await auditLogger.auditCreate(
+    req,
+    currentUser,
+    'TOTES',
+    'Tote',
+    toteId,
+    toteData,
+    `Tote ${toteData.codigo} creado`
+  );
+}
+```
+
+### Authentication Events
+
+Login and logout events are tracked:
+
+```javascript
+// Successful login
+await auditLogger.auditLogin(req, usuario, true);
+
+// Failed login
+await auditLogger.auditLogin(
+  req,
+  { Email: email },
+  false,
+  'Credenciales inválidas'
+);
+
+// Logout
+await auditLogger.auditLogout(req, usuario);
+```
+
+### System Events
+
+System-level events are logged:
+
+```javascript
+// Server startup
+auditLogger.auditSystem('Servidor iniciado en puerto 3000');
+
+// Database errors
+auditLogger.auditSystem(
+  'Error de conexión a base de datos',
+  false,
+  error.message
+);
+```
+
+## Event Details
+
+### DatosAdicionales Field
+
+The `DatosAdicionales` field stores detailed JSON:
+
+```json
+{
+  "usuarioId": 5,
+  "usuarioEmail": "juan@ditzler.com",
+  "usuarioRol": "Operador de Llenado",
+  "objetoTipo": "Tote",
+  "valoresAnteriores": {
+    "Estado": "DISPONIBLE",
+    "Ubicacion": "Warehouse-A",
+    "Producto": null
+  },
+  "valoresNuevos": {
+    "Estado": "LLENO",
+    "Ubicacion": "Warehouse-A",
+    "Producto": "Jarabe de Chocolate",
+    "Lote": "LOTE-240115",
+    "Peso": 285.5
+  }
+}
+```
+
+This enables:
+- Complete change history
+- Rollback capabilities
+- Diff views in UI
+- Compliance reporting
+
+### Client Information
+
+Network details are captured:
+
+```javascript
+// IP address detection
+const ip = req.headers['x-forwarded-for'] 
+  || req.ip 
+  || req.socket.remoteAddress;
+
+// User agent
+const userAgent = req.headers['user-agent'];
+
+// Example values
+{
+  "IpAddress": "192.168.1.100",
+  "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+}
+```
+
+<Info>
+For security, the system validates IP addresses and truncates user agents to 500 characters before storage.
+</Info>
+
+## Querying Audit Logs
+
+### List Events
+
+Retrieve events with pagination:
+
+```bash
+curl "http://localhost:3000/api/eventos?page=1&limit=50"
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "eventos": [
+    {
+      "Id": 15234,
+      "TipEvento": "Actualizacion",
+      "Descripcion": "Tote TOTE-1234 movido a Production-Line-2",
+      "Usuario": "Maria Lopez",
+      "FechaEvento": "2024-01-15T14:30:00",
+      "Severidad": "Info",
+      "Modulo": "TOTES"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 50,
+    "total": 15234,
+    "totalPages": 305
+  }
+}
+```
+
+### Filter Events
+
+Multiple filter options:
+
+```bash
+# By module
+curl "http://localhost:3000/api/eventos?modulo=TOTES"
+
+# By event type
+curl "http://localhost:3000/api/eventos?tipo=Login"
+
+# By user
+curl "http://localhost:3000/api/eventos?usuario=juan@ditzler.com"
+
+# By date range
+curl "http://localhost:3000/api/eventos?desde=2024-01-01&hasta=2024-01-31"
+
+# By severity
+curl "http://localhost:3000/api/eventos?severidad=Error"
+```
+
+### Event Details
+
+Get full details for a specific event:
+
+```bash
+curl "http://localhost:3000/api/eventos/15234"
+```
+
+Response includes complete JSON data:
+
+```json
+{
+  "success": true,
+  "evento": {
+    "Id": 15234,
+    "TipEvento": "Actualizacion",
+    "Descripcion": "Tote TOTE-1234 movido a Production-Line-2",
+    "Usuario": "Maria Lopez",
+    "FechaEvento": "2024-01-15T14:30:00.000Z",
+    "DatosAdicionales": {
+      "toteId": 45,
+      "codigo": "TOTE-1234",
+      "ubicacionAnterior": "Warehouse-A",
+      "ubicacionNueva": "Production-Line-2",
+      "operador": "Maria Lopez"
+    },
+    "IpAddress": "192.168.1.105",
+    "UserAgent": "Mozilla/5.0...",
+    "Severidad": "Info",
+    "Modulo": "TOTES",
+    "ResultadoExitoso": true,
+    "SessionId": "sess_1705330200_abc123"
+  }
+}
+```
+
+### Event Statistics
+
+Get summary statistics:
+
+```bash
+curl "http://localhost:3000/api/eventos/estadisticas"
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "estadisticas": {
+    "totalEventos": 15234,
+    "eventosHoy": 127,
+    "eventosSemana": 856,
+    "porTipo": {
+      "Actualizacion": 8500,
+      "Creacion": 3200,
+      "Login": 2100,
+      "Logout": 1900,
+      "Eliminacion": 234,
+      "Error": 200,
+      "Alerta": 100
+    },
+    "porModulo": {
+      "TOTES": 9000,
+      "USUARIOS": 4100,
+      "CLIENTES": 1500,
+      "PRODUCTOS": 634
+    },
+    "porSeveridad": {
+      "Info": 14500,
+      "Warning": 500,
+      "Error": 200,
+      "Critical": 34
+    }
+  }
+}
+```
+
+## Severity Levels
+
+Events are categorized by severity:
+
+<AccordionGroup>
+  <Accordion title="Debug">
+    Detailed diagnostic information for developers. Not shown to operators.
+  </Accordion>
+  
+  <Accordion title="Info">
+    Normal operational events (logins, CRUD operations, movements).
+  </Accordion>
+  
+  <Accordion title="Warning">
+    Potentially problematic situations (capacity warnings, expiration alerts).
+  </Accordion>
+  
+  <Accordion title="Error">
+    Error events that require attention (failed operations, validation errors).
+  </Accordion>
+  
+  <Accordion title="Critical">
+    Critical events requiring immediate action (system failures, security breaches).
+  </Accordion>
+</AccordionGroup>
+
+## Modules
+
+Events are organized by system module:
+
+- **USUARIOS** - User management operations
+- **TOTES** - Tote operations (create, move, fill, dispatch)
+- **CLIENTES** - Client management
+- **PRODUCTOS** - Product catalog
+- **UBICACIONES** - Location management
+- **LLENADO** - Filling operations
+- **DESPACHO** - Dispatch operations
+- **SISTEMA** - System-level events
+- **CONFIGURACION** - Settings and preferences
+
+## Maintenance
+
+### Event Cleanup
+
+The system provides a stored procedure to clean old events:
+
+```sql
+-- Clean events older than 365 days
+EXEC SP_LimpiarEventosAntiguos @diasAntiguedad = 365;
+```
+
+<Warning>
+Schedule this cleanup procedure to run monthly to prevent the Eventos table from growing indefinitely.
+</Warning>
+
+### Archive Strategy
+
+For long-term retention:
+
+```sql
+-- Archive events to separate table
+INSERT INTO Eventos_Archivo
+SELECT * FROM Eventos
+WHERE FechaEvento < DATEADD(year, -1, GETDATE());
+
+-- Then delete from active table
+DELETE FROM Eventos
+WHERE FechaEvento < DATEADD(year, -1, GETDATE());
+```
+
+## Performance
+
+### Indexes
+
+The Eventos table has strategic indexes:
+
+```sql
+CREATE INDEX IX_Eventos_FechaEvento ON Eventos(FechaEvento DESC);
+CREATE INDEX IX_Eventos_Usuario ON Eventos(Usuario);
+CREATE INDEX IX_Eventos_TipEvento ON Eventos(TipEvento);
+CREATE INDEX IX_Eventos_Modulo ON Eventos(Modulo);
+CREATE INDEX IX_Eventos_Severidad ON Eventos(Severidad);
+```
+
+### Query Optimization
+
+For large event tables (1M+ rows):
+
+```sql
+-- Use date range filters
+SELECT * FROM Eventos
+WHERE FechaEvento >= DATEADD(day, -30, GETDATE())
+  AND Modulo = 'TOTES'
+ORDER BY FechaEvento DESC;
+
+-- Index hints for specific queries
+SELECT * FROM Eventos WITH (INDEX(IX_Eventos_FechaEvento))
+WHERE FechaEvento >= '2024-01-01';
+```
+
+## UI Components
+
+The events interface (`pages/eventos.html`) includes:
+
+### Event Table
+
+- Sortable columns
+- Color-coded severity
+- Expandable rows for details
+- Export to CSV/Excel
+
+### Filters
+
+- Date range picker
+- Module dropdown
+- Event type dropdown
+- Severity selector
+- User search
+- Free text search
+
+### Event Details Modal
+
+- Full event information
+- Formatted JSON display
+- Before/after diff view
+- Related events timeline
+
+## Security Considerations
+
+### Sensitive Data
+
+The audit system never logs:
+
+- Passwords (even hashed)
+- Session tokens
+- API keys
+- Credit card numbers
+- Personal identification numbers
+
+<Info>
+The system automatically redacts these fields from `DatosAdicionales` before storage.
+</Info>
+
+### Access Control
+
+Event viewing is role-based:
+
+- **Administrador**: View all events
+- **Supervisor**: View all events (read-only)
+- **Operators**: View only their own events
+
+### Tamper Protection
+
+Events cannot be modified after creation:
+
+```sql
+-- No UPDATE statements allowed on Eventos
+-- Only INSERT and SELECT
+-- DELETE only via maintenance procedures
+```
+
+## Compliance
+
+The audit system supports compliance with:
+
+- **SOX** (Sarbanes-Oxley): Financial transaction tracking
+- **GDPR**: Data access and modification tracking
+- **ISO 27001**: Information security management
+- **FDA 21 CFR Part 11**: Electronic records for food/pharma
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Regular reviews" icon="magnifying-glass">
+    Review audit logs weekly for suspicious activity
+  </Card>
+  <Card title="Archive old events" icon="archive">
+    Move events older than 1 year to archive table
+  </Card>
+  <Card title="Monitor error rates" icon="chart-line">
+    Set up alerts for elevated error event rates
+  </Card>
+  <Card title="Investigate criticals" icon="siren-on">
+    Review all Critical severity events immediately
+  </Card>
+</CardGroup>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="API: Events" icon="code" href="/api/events">
+    Event query API reference
+  </Card>
+  <Card title="Database: Tables" icon="database" href="/database/tables">
+    Eventos table schema
+  </Card>
+  <Card title="Security Configuration" icon="shield" href="/configuration/security">
+    Security and audit settings
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/operations/monitoring">
+    System monitoring and alerts
+  </Card>
+</CardGroup>

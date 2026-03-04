@@ -1,0 +1,407 @@
+---
+title: "Users API"
+description: "Endpoints for user management (admin only)"
+---
+
+## User Management
+
+Unified endpoint for all user management operations. Requires admin authentication.
+
+<CodeGroup>
+```bash POST /api/admin/users
+curl -X POST https://api.ditzlertotes.com/api/admin/users \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "list"
+  }'
+```
+</CodeGroup>
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token obtained from login (must be an admin user)
+</ParamField>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Action to perform: `list`, `create`, `update`, or `delete`
+</ParamField>
+
+<ParamField body="userData" type="object">
+  User data object (required for create, update, and delete actions)
+</ParamField>
+
+---
+
+## List Users
+
+Retrieve all users in the system.
+
+<CodeGroup>
+```bash POST /api/admin/users
+curl -X POST https://api.ditzlertotes.com/api/admin/users \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "list"
+  }'
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Must be `"list"`
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="users" type="array">
+  Array of user objects
+</ResponseField>
+
+<ResponseField name="users[].Id" type="number">
+  User's unique identifier
+</ResponseField>
+
+<ResponseField name="users[].Nombre" type="string">
+  User's first name
+</ResponseField>
+
+<ResponseField name="users[].Apellido" type="string">
+  User's last name
+</ResponseField>
+
+<ResponseField name="users[].Email" type="string">
+  User's email address
+</ResponseField>
+
+<ResponseField name="users[].Rol" type="string">
+  User's role (e.g., "Admin", "Operador")
+</ResponseField>
+
+<ResponseField name="users[].Estado" type="string">
+  User's status ("Activo" or "Inactivo")
+</ResponseField>
+
+<ResponseField name="users[].FechaCreacion" type="string">
+  Date when the user was created
+</ResponseField>
+
+### Response Example
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "users": [
+    {
+      "Id": 1,
+      "Nombre": "Juan",
+      "Apellido": "Pérez",
+      "Email": "juan.perez@example.com",
+      "Rol": "Admin",
+      "Estado": "Activo",
+      "FechaCreacion": "2024-01-15 10:30:00"
+    },
+    {
+      "Id": 2,
+      "Nombre": "María",
+      "Apellido": "González",
+      "Email": "maria.gonzalez@example.com",
+      "Rol": "Operador",
+      "Estado": "Activo",
+      "FechaCreacion": "2024-02-20 14:15:00"
+    }
+  ]
+}
+```
+</CodeGroup>
+
+---
+
+## Create User
+
+Create a new user in the system.
+
+<CodeGroup>
+```bash POST /api/admin/users
+curl -X POST https://api.ditzlertotes.com/api/admin/users \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "create",
+    "userData": {
+      "nombre": "Carlos",
+      "apellido": "Ruiz",
+      "email": "carlos.ruiz@example.com",
+      "password": "securepassword123",
+      "rol": "Operador"
+    }
+  }'
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Must be `"create"`
+</ParamField>
+
+<ParamField body="userData" type="object" required>
+  User data object
+</ParamField>
+
+<ParamField body="userData.nombre" type="string" required>
+  User's first name
+</ParamField>
+
+<ParamField body="userData.apellido" type="string" required>
+  User's last name
+</ParamField>
+
+<ParamField body="userData.email" type="string" required>
+  User's email address (must be unique and valid format)
+</ParamField>
+
+<ParamField body="userData.password" type="string" required>
+  User's password (minimum 6 characters)
+</ParamField>
+
+<ParamField body="userData.rol" type="string">
+  User's role (defaults to "Operador" if not specified)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the user was created successfully
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+### Response Examples
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "message": "Usuario creado correctamente"
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Ya existe un usuario con ese email"
+}
+```
+</CodeGroup>
+
+---
+
+## Update User
+
+Update an existing user's information.
+
+<CodeGroup>
+```bash POST /api/admin/users
+curl -X POST https://api.ditzlertotes.com/api/admin/users \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "update",
+    "userData": {
+      "id": 2,
+      "nombre": "María",
+      "apellido": "González López",
+      "email": "maria.gonzalez@example.com",
+      "rol": "Admin",
+      "estado": "Activo",
+      "password": "newpassword123"
+    }
+  }'
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Must be `"update"`
+</ParamField>
+
+<ParamField body="userData" type="object" required>
+  User data object
+</ParamField>
+
+<ParamField body="userData.id" type="number" required>
+  User's unique identifier
+</ParamField>
+
+<ParamField body="userData.nombre" type="string" required>
+  User's first name
+</ParamField>
+
+<ParamField body="userData.apellido" type="string" required>
+  User's last name
+</ParamField>
+
+<ParamField body="userData.email" type="string" required>
+  User's email address
+</ParamField>
+
+<ParamField body="userData.rol" type="string" required>
+  User's role
+</ParamField>
+
+<ParamField body="userData.estado" type="string" required>
+  User's status ("Activo" or "Inactivo")
+</ParamField>
+
+<ParamField body="userData.password" type="string">
+  New password (optional, minimum 6 characters if provided)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the user was updated successfully
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+### Response Examples
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "message": "Usuario actualizado correctamente"
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "La contraseña debe tener al menos 6 caracteres"
+}
+```
+</CodeGroup>
+
+---
+
+## Delete User
+
+Delete a user from the system.
+
+<CodeGroup>
+```bash POST /api/admin/users
+curl -X POST https://api.ditzlertotes.com/api/admin/users \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "delete",
+    "userData": {
+      "id": 5
+    }
+  }'
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Must be `"delete"`
+</ParamField>
+
+<ParamField body="userData" type="object" required>
+  User data object
+</ParamField>
+
+<ParamField body="userData.id" type="number" required>
+  ID of the user to delete
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the user was deleted successfully
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+### Response Examples
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "message": "Usuario eliminado correctamente"
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "La cuenta de administrador raíz no puede ser eliminada"
+}
+```
+</CodeGroup>
+
+---
+
+## Important Notes
+
+### Root Admin Protection
+
+The root admin account (`admin@ditzler.com`) has special protections:
+
+- Cannot be deleted
+- Must always maintain admin role ("Administrador" or "Admin")
+- Cannot have the "usuarios" function excluded from preferences
+
+### Email Validation
+
+- Email addresses must be in valid format
+- Email addresses must be unique across all users
+- Changing a user's email is validated against existing users
+
+### Password Requirements
+
+- Minimum 6 characters
+- Password is optional when updating (only updated if provided and not empty)
+
+### Audit Logging
+
+All user management operations (create, update, delete) are automatically logged to the audit system with:
+
+- Current user information
+- Action performed
+- Old and new values (for updates)
+- Timestamp and IP address
+
+### Error Handling
+
+Common error messages:
+
+- `"No autorizado"` - Missing or invalid authentication token
+- `"Datos de usuario requeridos"` - Missing userData in request
+- `"ID de usuario requerido"` - Missing user ID for update/delete
+- `"Acción no válida"` - Invalid action parameter
+- `"El formato del email no es válido"` - Email format validation failed
+- `"Ya existe un usuario con ese email"` - Duplicate email constraint violation
+- `"Usuario no encontrado"` - User ID does not exist
+- `"Los datos no cumplen con las validaciones requeridas"` - Database constraint violation

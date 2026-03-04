@@ -1,0 +1,416 @@
+---
+title: Tote Operator Workflow
+description: Guide for tote reception operations including scanning, status updates, and routing totes to reprocessing, washing, or maintenance areas
+---
+
+# Tote Operator Workflow
+
+The Tote Operator module manages the reception and routing of totes to various processing areas including reprocessing, washing, and maintenance.
+
+## Overview
+
+Tote operators are responsible for:
+- Receiving and scanning incoming totes
+- Evaluating tote and content condition
+- Routing to appropriate destinations:
+  - Reprocessing (product recovery)
+  - Waste/Discard (product disposal)
+  - Washing (cleaning)
+  - Maintenance (repair)
+
+## Workflow Process
+
+<Steps>
+
+### Step 1: Scan Tote Code
+
+Begin by scanning or entering the tote identification code.
+
+**Input Methods:**
+- Scan the tote's barcode using a scanner
+- Manually enter the tote code
+- Press Enter or click "Buscar" to search
+
+**Search Operation:**
+```javascript
+// System searches for exact code match
+const response = await fetch(`/api/totes?codigo=${encodeURIComponent(codigo)}`);
+// Finds tote by id_tote or Codigo field (case-insensitive)
+```
+
+**Display Information:**
+Once found, the system displays:
+- **Tote Code**: Full identification code
+- **Status**: Current tote status (with color coding)
+- **Client**: Assigned client name
+- **Product**: Current product in tote
+- **Current Location**: Where the tote is now
+- **Weight**: Product weight (if recorded)
+
+### Step 2: Evaluate and Select Destination
+
+Based on the tote's condition and content, select the appropriate destination.
+
+**Available Destinations:**
+
+#### Option 1: Reprocessing/Waste (Expandable)
+
+Click the "Reproceso/Desecho" button to expand options:
+
+**A. Product for Reprocessing:**
+- Product can be recovered and reused
+- Routes to reprocessing area
+- Product information is retained
+- Status changes to "REPROCESO"
+
+**B. Product Discarded:**
+- Product must be disposed of
+- Routes to waste area
+- **Tote is emptied**: Product, lot, weight, client, and codes are cleared
+- Status changes to "TOTE VACIO"
+
+#### Option 2: Tote for Washing
+
+- Direct routing to cleaning area
+- **Tote is emptied**: All content information cleared
+- Status changes to "EN MANTENCION"
+- Client assignment removed
+
+#### Option 3: Tote to Maintenance
+
+- Routes tote for repair
+- Used when tote has physical damage
+- **Tote is emptied**: All content cleared
+- Status changes to "EN MANTENCION"
+- Client assignment removed
+
+### Step 3: Select Specific Location
+
+After choosing a destination type, select the specific location.
+
+**Location Selection Modal:**
+- System loads configured locations for the selected area
+- Locations are filtered by area type:
+  - **Washing**: Areas with "LAVADO" or "LIMPIEZA" in name
+  - **Reprocessing**: Areas with "REPROCESO" in name
+  - **Waste**: Areas with "DESECHO" or "DESECHADO" in name
+  - **Maintenance**: Areas with "MANTENCION", "TALLER", or "REPARACION" in name
+
+**Location Query:**
+```javascript
+// Loads all locations and filters client-side
+const response = await fetch('/api/ubicaciones');
+// Filters by area name matching destination type
+ubicacionesLavado = todas.filter(u => {
+  const area = (u.Area || '').toUpperCase();
+  const nombre = (u.Nombre || '').toUpperCase();
+  return area.includes('LAVADO') || nombre.includes('LAVADO');
+});
+```
+
+<Note>
+**Location Configuration:**
+If no locations are configured for a destination type, the system displays an error:
+"No hay ubicaciones de [Type] configuradas. Debe crear una ubicación primero."
+
+Administrators must create locations in the system before operators can use them.
+</Note>
+
+### Step 4: Confirm Movement
+
+Review the selected destination and confirm the movement.
+
+**Confirmation Modal:**
+- Shows selected location name and code
+- Allows cancellation if incorrect
+- Click "Confirmar" to proceed
+
+**Update Operation:**
+```javascript
+// Updates tote status and location
+const response = await fetch('/api/operador/totes/update-status', {
+  method: 'PUT',
+  headers: {
+    'Authorization': `Bearer ${operadorEmail}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    codigo: currentTote.codigo,
+    nuevoEstado: nuevoEstado,  // Based on destination
+    nuevaUbicacion: destino,
+    operador: operadorNombre,
+    observaciones: observaciones
+  })
+});
+```
+
+### Step 5: Movement Confirmation
+
+After successful movement, the system:
+- Displays success message with destination
+- Clears the tote information
+- Returns focus to the scan field
+- Logs the movement in the events table
+
+**Success Message Example:**
+```
+✅ Tote E200001234 enviado a Área de Lavado
+```
+
+</Steps>
+
+## Business Rules
+
+### Automatic State Changes
+
+The system applies automatic state changes based on destination:
+
+| Destination Type | New Status | Content Cleared | Client Removed |
+|-----------------|------------|-----------------|----------------|
+| Reprocessing | REPROCESO | No | No |
+| Waste/Discard | TOTE VACIO | Yes | Yes |
+| Washing | EN MANTENCION | Yes | Yes |
+| Maintenance | EN MANTENCION | Yes | Yes |
+
+### Content Clearing Logic
+
+When a tote is sent to certain destinations, the system automatically clears:
+
+```javascript
+// Fields cleared for washing, maintenance, and waste
+updateFields.push('Producto = NULL');
+updateFields.push('Lote = NULL');
+updateFields.push('Peso = NULL');
+updateFields.push('Cliente = NULL');
+updateFields.push('CodigoBarra = NULL');  // Tracking code
+updateFields.push('CodigoRetail = NULL'); // Retail code
+```
+
+**Destinations that clear content:**
+- DESECHO / DESECHADO (Waste)
+- LAVADO / LIMPIEZA (Washing)
+- MANTENCION (Maintenance)
+
+**Destinations that preserve content:**
+- REPROCESO (Reprocessing)
+
+## Event Logging
+
+All tote movements are logged in the `Eventos` table:
+
+```sql
+INSERT INTO Eventos 
+(ToteId, TipEvento, Descripcion, Usuario, FechaEvento, Severidad, Modulo, Accion, DatosAdicionales, ResultadoExitoso)
+VALUES 
+(@toteId, 'CambioEstado', @descripcion, @usuario, @fechaEvento, 'Info', 'OPERADOR_TOTES', 'UPDATE_STATUS', @datosAdicionales, 1)
+```
+
+**Event Data Includes:**
+- Tote code
+- Previous status
+- New status
+- Previous location
+- New location
+- Client information
+- Product information
+- Operator who made the change
+- Timestamp
+
+## User Interface Components
+
+### Scan Section
+
+Prominent purple gradient section for tote scanning:
+- Large input field for code entry
+- Search button
+- Auto-focus for quick scanning
+
+### Tote Information Card
+
+Displays when a tote is found:
+- **Header**: Shows code and status badge
+- **Details Grid**: 4-column responsive layout
+- **Status Colors**:
+  - Green: Disponible / Vacio (Available/Empty)
+  - Blue: En uso / Cliente (In use/With client)
+
+### Destination Buttons
+
+Large, color-coded buttons for each destination:
+
+1. **Reproceso/Desecho** (Orange gradient)
+   - Expandable button with chevron icon
+   - Shows sub-options when clicked
+
+2. **Tote para Lavado** (Blue gradient)
+   - Water drop icon
+   - Direct action button
+
+3. **Tote a Mantención** (Yellow-orange gradient)
+   - Tools icon
+   - Direct action button
+
+### Location Selection Modal
+
+- Clean, centered modal design
+- Dropdown with all locations for selected area
+- Shows location name and code
+- Cancel and Confirm buttons
+- Closes on background click
+
+### Toast Notifications
+
+Fixed position notifications (top-right):
+- **Success**: Green gradient
+- **Error**: Red gradient
+- **Warning**: Orange gradient
+- **Info**: Blue gradient
+- Auto-hide after 5 seconds
+- Slide-in animation
+
+## Mobile Optimization
+
+### Responsive Design Features
+
+**Layout Adjustments:**
+- Single column layout on mobile
+- Full-width buttons
+- Larger touch targets
+- Stacked information cards
+
+**Mobile-Specific Elements:**
+- Bottom navigation bar
+- Mobile menu toggle
+- Touch-optimized controls
+- Prevented double-tap zoom
+
+```css
+@media (max-width: 768px) {
+  .location-buttons {
+    grid-template-columns: 1fr;
+  }
+  .tote-details {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+```
+
+## Permission and Access Control
+
+### Role Requirements
+
+```javascript
+const allowedRoles = ['Operador Totes', 'Admin', 'Administrador'];
+// System checks user role on page load
+if (!PERMISSIONS.hasAnyRole(userRole, allowedRoles)) {
+  // Access denied - redirect to login
+}
+```
+
+### Session Management
+
+- Session validated on page load
+- Auto-logout on inactivity timeout
+- Token-based authentication
+- Email used as authentication identifier
+
+## API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|----------|
+| `/api/totes` | GET | Search tote by code |
+| `/api/ubicaciones` | GET | Load all locations |
+| `/api/operador/totes/update-status` | PUT | Update tote status and location |
+| `/api/eventos` | POST | Log movement event |
+
+## Error Handling
+
+### Common Error Scenarios
+
+<Warning>
+**Tote Not Found:**
+- Message: "No se encontró el tote [CODE]"
+- Verify the code is correct
+- Check if tote exists in system
+- Ensure tote is active (not deleted)
+</Warning>
+
+<Warning>
+**No Locations Configured:**
+- Message: "No hay ubicaciones de [TYPE] configuradas"
+- Administrator must create locations first
+- Check location area assignments
+- Verify location is active
+</Warning>
+
+<Warning>
+**Update Failed:**
+- Message: "Error al procesar el movimiento"
+- Check network connection
+- Verify session is still valid
+- Review server logs for details
+</Warning>
+
+## History Tracking
+
+Operators can view their movement history:
+- Navigate to "Mis Movimientos" in sidebar
+- Shows all totes processed by the operator
+- Includes date, time, and destination
+- Filterable by date range
+
+## Best Practices
+
+<Tip>
+**Efficient Workflow:**
+- Scan totes quickly using barcode scanner
+- Use keyboard shortcuts (Enter to search)
+- Review tote information before selecting destination
+- Confirm movement details in modal before confirming
+</Tip>
+
+<Tip>
+**Quality Control:**
+- Verify product condition before routing
+- Use Reprocessing for salvageable product
+- Use Waste for contaminated or spoiled product
+- Report damaged totes to maintenance
+</Tip>
+
+<Tip>
+**Record Keeping:**
+- System automatically logs all movements
+- Check "Mis Movimientos" periodically
+- Report any discrepancies to supervisor
+- Movements are auditable by date and operator
+</Tip>
+
+## Troubleshooting
+
+### Scanner Issues
+
+- Ensure scanner is configured for Enter key termination
+- Check scanner USB connection
+- Test scanner with notepad first
+- Verify barcode format matches system expectations
+
+### Location Not Appearing
+
+- Verify location exists in admin panel
+- Check location area assignment
+- Ensure location is marked as active
+- Contact administrator to create/update locations
+
+### Movement Not Saving
+
+- Check internet connection
+- Verify you're still logged in
+- Ensure tote is not locked by another process
+- Try refreshing the page and scanning again
+
+## Related Documentation
+
+- [Filling Operator Workflow](/operators/filling-operator) - Initial tote filling process
+- [Dispatch Operator Workflow](/operators/dispatch-operator) - Moving totes to clients
+- [Location Management](/admin/locations) - Configuring locations for routing
+- [Event Tracking](/features/events) - Understanding system event logs

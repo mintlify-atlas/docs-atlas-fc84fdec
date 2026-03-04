@@ -1,0 +1,464 @@
+---
+title: 'Authentication'
+description: 'Complete guide to authenticating with the DitzlerTotes API using JWT tokens'
+---
+
+## Overview
+
+The DitzlerTotes API uses **JSON Web Tokens (JWT)** for authentication. After successful login, you receive a token that must be included in the `Authorization` header of all subsequent requests.
+
+## Authentication Flow
+
+<Steps>
+  <Step title="Login with Credentials">
+    Send your email and password to the `/api/login` endpoint.
+  </Step>
+  
+  <Step title="Receive JWT Token">
+    On success, the API returns a JWT token valid for 24 hours.
+  </Step>
+  
+  <Step title="Include Token in Requests">
+    Add the token to the `Authorization` header as `Bearer <token>`.
+  </Step>
+  
+  <Step title="Refresh or Re-authenticate">
+    When the token expires, login again to receive a new token.
+  </Step>
+</Steps>
+
+## Login Endpoint
+
+Authenticate a user and receive a JWT token.
+
+### Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST "http://localhost:3000/api/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "your-password"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:3000/api/login', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    email: 'user@example.com',
+    password: 'your-password'
+  })
+});
+
+const data = await response.json();
+const token = data.token;
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'http://localhost:3000/api/login',
+    json={
+        'email': 'user@example.com',
+        'password': 'your-password'
+    }
+)
+
+data = response.json()
+token = data['token']
+```
+</CodeGroup>
+
+### Request Parameters
+
+<ParamField body="email" type="string" required>
+  User's email address (used as username)
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password (transmitted securely over HTTPS in production)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if login was successful
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  JWT token for authenticated requests (valid for 24 hours)
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  User's username
+</ResponseField>
+
+<ResponseField name="fullname" type="string">
+  User's full name (first and last name)
+</ResponseField>
+
+<ResponseField name="isAdmin" type="boolean">
+  Whether the user has administrator privileges
+</ResponseField>
+
+<ResponseField name="role" type="string">
+  User's role in the system (e.g., "Admin", "Operador", "Supervisor")
+</ResponseField>
+
+<ResponseField name="userId" type="integer">
+  Unique user identifier
+</ResponseField>
+
+<ResponseField name="preferences" type="object">
+  User's saved preferences (UI settings, defaults, etc.)
+</ResponseField>
+
+### Success Response Example
+
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTUsImVtYWlsIjoidXNlckBleGFtcGxlLmNvbSIsInVzZXJuYW1lIjoianNtaXRoIiwiZnVsbG5hbWUiOiJKb2huIFNtaXRoIiwicm9sZSI6Ik9wZXJhZG9yIiwiaXNBZG1pbiI6ZmFsc2UsImlhdCI6MTcwOTU1MzYwMCwiZXhwIjoxNzA5NjQwMDAwfQ.abc123xyz789...",
+  "username": "jsmith",
+  "fullname": "John Smith",
+  "isAdmin": false,
+  "role": "Operador",
+  "userId": 15,
+  "preferences": {
+    "theme": "light",
+    "defaultView": "dashboard",
+    "itemsPerPage": 50
+  }
+}
+```
+
+### Error Response Example
+
+```json
+{
+  "success": false,
+  "message": "Credenciales inválidas"
+}
+```
+
+## Using the JWT Token
+
+After receiving the token, include it in all subsequent API requests.
+
+### Token Format
+
+The token is a standard JWT with three parts:
+
+1. **Header**: Algorithm and token type
+2. **Payload**: User data (id, email, username, role, isAdmin)
+3. **Signature**: Cryptographic signature for verification
+
+### Token Payload Structure
+
+```json
+{
+  "id": 15,
+  "email": "user@example.com",
+  "username": "jsmith",
+  "fullname": "John Smith",
+  "role": "Operador",
+  "isAdmin": false,
+  "iat": 1709553600,
+  "exp": 1709640000
+}
+```
+
+### Making Authenticated Requests
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:3000/api/totes" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+```javascript JavaScript
+const token = localStorage.getItem('authToken');
+
+const response = await fetch('http://localhost:3000/api/totes', {
+  method: 'GET',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  }
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+headers = {
+    'Content-Type': 'application/json',
+    'Authorization': f'Bearer {token}'
+}
+
+response = requests.get('http://localhost:3000/api/totes', headers=headers)
+data = response.json()
+```
+</CodeGroup>
+
+## Token Expiration
+
+JWT tokens expire after **24 hours** by default (configurable via `JWT_EXPIRES_IN` environment variable).
+
+### Handling Expired Tokens
+
+When a token expires, the API returns:
+
+```json
+{
+  "success": false,
+  "message": "Token inválido o expirado"
+}
+```
+
+HTTP Status: `403 Forbidden`
+
+### Best Practices
+
+- Store the token securely (localStorage, secure cookie, or memory)
+- Implement automatic re-authentication when token expires
+- Clear the token on logout
+- Never expose the token in URLs or logs
+
+## User Preferences
+
+Manage user-specific settings and preferences.
+
+### Get User Preferences
+
+Retrieve the authenticated user's preferences.
+
+<CodeGroup>
+```bash Request
+curl -X GET "http://localhost:3000/api/user/preferences" \
+  -H "Authorization: Bearer <your-token>"
+```
+
+```json Response
+{
+  "success": true,
+  "preferences": {
+    "theme": "dark",
+    "language": "es",
+    "defaultView": "dashboard",
+    "itemsPerPage": 50,
+    "notifications": {
+      "email": true,
+      "push": false
+    }
+  }
+}
+```
+</CodeGroup>
+
+### Update User Preferences
+
+Update the authenticated user's preferences.
+
+<CodeGroup>
+```bash Request
+curl -X PUT "http://localhost:3000/api/user/preferences" \
+  -H "Authorization: Bearer <your-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "preferences": {
+      "theme": "dark",
+      "itemsPerPage": 100
+    }
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "Preferencias guardadas",
+  "preferences": {
+    "theme": "dark",
+    "language": "es",
+    "defaultView": "dashboard",
+    "itemsPerPage": 100,
+    "notifications": {
+      "email": true,
+      "push": false
+    }
+  }
+}
+```
+</CodeGroup>
+
+<ParamField body="preferences" type="object" required>
+  Object containing preference key-value pairs to update
+</ParamField>
+
+### Update Any User's Preferences (Admin Only)
+
+Administrators can update preferences for any user.
+
+<CodeGroup>
+```bash Request
+curl -X PUT "http://localhost:3000/api/admin/user-preferences" \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 15,
+    "preferences": {
+      "theme": "light",
+      "itemsPerPage": 25
+    }
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "Preferencias del usuario guardadas",
+  "preferences": {
+    "theme": "light",
+    "itemsPerPage": 25
+  }
+}
+```
+</CodeGroup>
+
+<ParamField body="userId" type="integer" required>
+  ID of the user whose preferences should be updated
+</ParamField>
+
+<ParamField body="preferences" type="object" required>
+  Object containing preference key-value pairs to update
+</ParamField>
+
+## Legacy Authentication
+
+The API supports a legacy authentication method for backward compatibility:
+
+```bash
+Authorization: Bearer user@example.com
+```
+
+This sends the email directly instead of a JWT. While still supported, **JWT authentication is strongly recommended** for all new integrations.
+
+## Security Considerations
+
+<Warning>
+  Always use HTTPS in production to protect tokens in transit.
+</Warning>
+
+### Best Practices
+
+- **Secure Storage**: Never store tokens in plain text or local storage without encryption
+- **HTTPS Only**: Always use HTTPS in production environments
+- **Token Rotation**: Implement token refresh or re-authentication before expiration
+- **Logout**: Clear tokens from client storage on logout
+- **No URL Parameters**: Never pass tokens in URL query parameters
+- **Short Expiration**: Keep token expiration times reasonable (24 hours default)
+
+## Audit Logging
+
+All authentication attempts are automatically logged:
+
+- Login timestamp and IP address
+- User agent (browser/client information)
+- Success/failure status
+- Error messages for failed attempts
+- Session ID for tracking user activity
+
+Administrators can view authentication logs in the admin dashboard.
+
+## Role-Based Access Control
+
+The API enforces role-based permissions:
+
+### User Roles
+
+<ResponseField name="Admin" type="role">
+  Full system access including user management, configuration, and all CRUD operations
+</ResponseField>
+
+<ResponseField name="Supervisor" type="role">
+  Read/write access to operational data, limited administrative functions
+</ResponseField>
+
+<ResponseField name="Operador" type="role">
+  Standard user access for daily operations (tote management, filling, movements)
+</ResponseField>
+
+### Checking Permissions
+
+The JWT payload includes `isAdmin` and `role` fields:
+
+```javascript
+if (decodedToken.isAdmin) {
+  // Admin-only functionality
+}
+
+if (decodedToken.role === 'Supervisor') {
+  // Supervisor functionality
+}
+```
+
+## Error Responses
+
+### Missing Token
+
+```json
+{
+  "success": false,
+  "message": "Token de autenticación requerido"
+}
+```
+
+HTTP Status: `401 Unauthorized`
+
+### Invalid Token
+
+```json
+{
+  "success": false,
+  "message": "Token inválido o expirado"
+}
+```
+
+HTTP Status: `403 Forbidden`
+
+### Invalid Credentials
+
+```json
+{
+  "success": false,
+  "message": "Credenciales inválidas"
+}
+```
+
+HTTP Status: `401 Unauthorized`
+
+### Insufficient Permissions
+
+```json
+{
+  "success": false,
+  "message": "Acceso denegado. Se requiere rol de administrador."
+}
+```
+
+HTTP Status: `403 Forbidden`
+
+## Next Steps
+
+<Card title="Error Handling" icon="triangle-exclamation" href="/api/error-handling">
+  Learn how to handle API errors and implement proper error handling
+</Card>

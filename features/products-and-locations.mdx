@@ -1,0 +1,505 @@
+---
+title: Products and locations
+description: Manage product catalogs and warehouse location hierarchies
+---
+
+DitzlerTotes provides robust management for products and storage locations, enabling organized tracking of tote contents and warehouse operations.
+
+## Overview
+
+The product and location management system helps you maintain accurate inventories, organize warehouse spaces, and track what products are in which totes.
+
+<CardGroup cols={2}>
+  <Card title="Product Catalog" icon="flask">
+    Maintain a catalog of products stored in totes
+  </Card>
+  <Card title="Location Hierarchy" icon="sitemap">
+    Organize warehouse into zones and areas
+  </Card>
+  <Card title="Category Management" icon="tags">
+    Group products by category for better organization
+  </Card>
+  <Card title="Capacity Planning" icon="gauge">
+    Track location capacity and utilization
+  </Card>
+</CardGroup>
+
+## Product Management
+
+### Product Data Model
+
+Products are stored in the `Productos` table:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| **Id** | int | Primary key |
+| **Nombre** | nvarchar(100) | Product name (unique, required) |
+| **Descripcion** | nvarchar(500) | Detailed description |
+| **Codigo** | nvarchar(50) | Product code/SKU |
+| **Categoria** | nvarchar(50) | Product category |
+| **Estado** | nvarchar(20) | Activo or Inactivo |
+| **FechaCreacion** | datetime | Creation timestamp |
+| **FechaModificacion** | datetime | Last modified timestamp |
+
+### Product Categories
+
+DitzlerTotes supports product categorization:
+
+- **Dulces** - Sweet syrups and confections
+- **Aceites** - Oils and liquid fats
+- **Jarabes** - Flavored syrups
+- **Esencias** - Flavor essences and extracts
+- **Otros** - Other products
+
+<Tip>
+Use consistent categories across your organization for better reporting and inventory management.
+</Tip>
+
+### List Products
+
+Retrieve all active products:
+
+```bash
+curl http://localhost:3000/api/productos
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "productos": [
+    {
+      "Id": 1,
+      "Nombre": "Jarabe de Chocolate",
+      "Descripcion": "Jarabe de chocolate premium para helados",
+      "Codigo": "JRC-001",
+      "Categoria": "Jarabes",
+      "Estado": "Activo"
+    },
+    {
+      "Id": 2,
+      "Nombre": "Esencia de Vainilla",
+      "Descripcion": "Esencia natural de vainilla Madagascar",
+      "Codigo": "ESV-001",
+      "Categoria": "Esencias",
+      "Estado": "Activo"
+    }
+  ]
+}
+```
+
+### Create Product
+
+Add a new product to the catalog:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/productos \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "create",
+    "productData": {
+      "nombre": "Aceite de Coco Refinado",
+      "descripcion": "Aceite de coco refinado para uso industrial",
+      "codigo": "ACR-003",
+      "categoria": "Aceites",
+      "estado": "Activo"
+    }
+  }'
+```
+
+<Steps>
+  <Step title="Validate Name">
+    Check that product name is unique and not empty
+  </Step>
+  <Step title="Generate Code">
+    If no code provided, auto-generate from category prefix
+  </Step>
+  <Step title="Insert Record">
+    Create product in Productos table
+  </Step>
+  <Step title="Audit Log">
+    Record creation event with product details
+  </Step>
+</Steps>
+
+### Update Product
+
+Modify product information:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/productos \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "update",
+    "productData": {
+      "id": 1,
+      "nombre": "Jarabe de Chocolate Premium",
+      "descripcion": "Jarabe de chocolate belga premium",
+      "codigo": "JRC-001",
+      "categoria": "Jarabes",
+      "estado": "Activo"
+    }
+  }'
+```
+
+### Delete Product
+
+Remove a product from the catalog:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/productos \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "delete",
+    "productData": {
+      "id": 3
+    }
+  }'
+```
+
+<Warning>
+Deleting a product will fail if there are totes currently using it. Set product status to "Inactivo" instead.
+</Warning>
+
+## Location Management
+
+### Location Data Model
+
+Locations are stored in the `Ubicaciones` table:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| **Id** | int | Primary key |
+| **Nombre** | nvarchar(100) | Location name (unique, required) |
+| **Descripcion** | nvarchar(500) | Detailed description |
+| **Codigo** | nvarchar(50) | Location code |
+| **Tipo** | nvarchar(50) | Location type |
+| **Capacidad** | int | Maximum tote capacity |
+| **Estado** | nvarchar(20) | Activo or Inactivo |
+| **FechaCreacion** | datetime | Creation timestamp |
+| **FechaModificacion** | datetime | Last modified timestamp |
+
+### Location Types
+
+Locations can be categorized by type:
+
+- **Almacén** - General warehouse storage
+- **Producción** - Production line areas
+- **Despacho** - Shipping and dispatch zones
+- **Mantenimiento** - Maintenance and cleaning areas
+- **Residuos** - Waste disposal areas
+- **Reproceso** - Reprocessing zones
+- **Lavado** - Washing stations
+- **Tránsito** - Temporary transit areas
+
+### List Locations
+
+Get all locations with tote counts:
+
+```bash
+curl http://localhost:3000/api/ubicaciones
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "ubicaciones": [
+    {
+      "Id": 1,
+      "Nombre": "Warehouse-A",
+      "Tipo": "Almacén",
+      "Capacidad": 500,
+      "TotesActuales": 342,
+      "Disponibilidad": 158,
+      "Estado": "Activo"
+    },
+    {
+      "Id": 2,
+      "Nombre": "Production-Line-1",
+      "Tipo": "Producción",
+      "Capacidad": 100,
+      "TotesActuales": 85,
+      "Disponibilidad": 15,
+      "Estado": "Activo"
+    }
+  ]
+}
+```
+
+### Filter Locations by Area
+
+Operators can filter locations by type:
+
+```bash
+curl "http://localhost:3000/api/ubicaciones?area=Almacén"
+```
+
+This is useful in operator interfaces to show only relevant locations for their workflow.
+
+### Create Location
+
+Add a new warehouse location:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/ubicaciones \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "create",
+    "locationData": {
+      "nombre": "Warehouse-B-Zone-3",
+      "descripcion": "Third zone of Warehouse B for cold storage",
+      "codigo": "WH-B-Z3",
+      "tipo": "Almacén",
+      "capacidad": 250,
+      "estado": "Activo"
+    }
+  }'
+```
+
+### Update Location
+
+Modify location details:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/ubicaciones \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "update",
+    "locationData": {
+      "id": 1,
+      "nombre": "Warehouse-A-Expansion",
+      "capacidad": 750,
+      "estado": "Activo"
+    }
+  }'
+```
+
+### Delete Location
+
+Remove a location:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/ubicaciones \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "delete",
+    "locationData": {
+      "id": 5
+    }
+  }'
+```
+
+<Warning>
+Deleting a location will fail if there are totes currently at that location. Move all totes first or set location status to "Inactivo".
+</Warning>
+
+## Capacity Management
+
+### Tracking Capacity
+
+The system tracks location capacity and utilization:
+
+```javascript
+// Calculated fields
+{
+  "Capacidad": 500,           // Maximum totes
+  "TotesActuales": 342,       // Current tote count
+  "Disponibilidad": 158,       // Available space (500 - 342)
+  "Utilizacion": 68.4          // Utilization % (342/500 * 100)
+}
+```
+
+### Capacity Alerts
+
+The dashboard shows capacity warnings:
+
+- **Green**: Less than 70% utilized
+- **Yellow**: 70-90% utilized  
+- **Red**: Over 90% utilized
+- **Critical**: At or over 100% capacity
+
+<Info>
+Locations can temporarily exceed capacity during peak operations, but this should trigger investigation.
+</Info>
+
+## Integration with Totes
+
+### Product Assignment
+
+When filling a tote, the product is selected from the catalog:
+
+```javascript
+// Filling operator workflow
+{
+  "codigo": "TOTE-1234",
+  "producto": "Jarabe de Chocolate",  // From Productos table
+  "lote": "LOTE-240115",
+  "peso": 285.5
+}
+```
+
+### Location Assignment
+
+Totes are always assigned to a location:
+
+```javascript
+// Location tracking
+{
+  "codigo": "TOTE-1234",
+  "ubicacion": "Warehouse-A",  // From Ubicaciones table
+  "estado": "LLENO"
+}
+```
+
+### Movement Validation
+
+When moving totes, the system validates:
+
+1. Target location exists and is active
+2. Target location has available capacity
+3. Movement is allowed based on current tote state
+4. User has permission to move to that location
+
+## UI Components
+
+### Products Interface
+
+The products page (`pages/productos.html`) includes:
+
+- Product table with search and filters
+- Category grouping
+- Create/edit/delete actions
+- Usage statistics (how many totes use each product)
+- Export to CSV
+
+### Locations Interface
+
+The locations page (`pages/ubicaciones.html`) includes:
+
+- Location table with capacity indicators
+- Type filtering
+- Map view (if coordinates provided)
+- Tote list per location
+- Capacity utilization charts
+- Create/edit/delete actions
+
+## Service Implementation
+
+### Products Service
+
+Key functions in `services/products.service.js`:
+
+```javascript
+// List all active products
+async function list() {
+  // Returns products with Estado = 'Activo'
+}
+
+// Create product with validation
+async function create(productData, currentUser, req) {
+  // Validates uniqueness, creates, audits
+}
+
+// Update product
+async function update(productData, currentUser, req) {
+  // Updates with before/after audit trail
+}
+
+// Delete product (with dependency check)
+async function deleteProduct(productId, currentUser, req) {
+  // Checks for active totes using this product
+}
+```
+
+### Locations Service
+
+Key functions in `services/locations.service.js`:
+
+```javascript
+// List locations with tote counts
+async function list() {
+  // Joins with Totes table to get current counts
+}
+
+// Filter by area/type
+async function listByArea(area) {
+  // Returns locations of specific type
+}
+
+// Create location
+async function create(locationData, currentUser, req) {
+  // Validates, creates, audits
+}
+```
+
+## Reporting
+
+### Product Usage Report
+
+Track which products are most used:
+
+```sql
+SELECT 
+  p.Nombre as Producto,
+  COUNT(t.Id) as TotesActuales,
+  SUM(t.Peso) as PesoTotal,
+  AVG(t.Peso) as PesoPromedio
+FROM Productos p
+LEFT JOIN Totes t ON t.Producto = p.Nombre AND t.Activo = 1
+GROUP BY p.Nombre
+ORDER BY TotesActuales DESC;
+```
+
+### Location Utilization Report
+
+Analyze warehouse utilization:
+
+```sql
+SELECT 
+  u.Nombre as Ubicacion,
+  u.Capacidad,
+  COUNT(t.Id) as TotesActuales,
+  CAST(COUNT(t.Id) * 100.0 / u.Capacidad AS DECIMAL(5,2)) as Utilizacion
+FROM Ubicaciones u
+LEFT JOIN Totes t ON t.Ubicacion = u.Nombre AND t.Activo = 1
+WHERE u.Estado = 'Activo'
+GROUP BY u.Nombre, u.Capacidad
+ORDER BY Utilizacion DESC;
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Descriptive names" icon="tag">
+    Use clear, descriptive names for products and locations
+  </Card>
+  <Card title="Consistent codes" icon="barcode">
+    Follow a consistent coding scheme (e.g., JRC-XXX for syrups)
+  </Card>
+  <Card title="Realistic capacity" icon="boxes-stacked">
+    Set location capacity based on physical space, not theoretical maximum
+  </Card>
+  <Card title="Regular audits" icon="clipboard-check">
+    Audit product/location lists quarterly to remove unused entries
+  </Card>
+</CardGroup>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="API: Products" icon="code" href="/api/products">
+    Product management API reference
+  </Card>
+  <Card title="API: Locations" icon="code" href="/api/locations">
+    Location management API reference
+  </Card>
+  <Card title="Tote Management" icon="box" href="/features/tote-management">
+    How products and locations integrate with totes
+  </Card>
+  <Card title="Filling Operator" icon="fill-drip" href="/operators/filling-operator">
+    Selecting products during filling operations
+  </Card>
+</CardGroup>

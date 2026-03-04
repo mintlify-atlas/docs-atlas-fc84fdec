@@ -1,0 +1,346 @@
+---
+title: 'Movement History'
+description: 'API endpoint for querying tote movement history and tracking location changes'
+---
+
+## Get Movement History
+
+Retrieve the history of tote movements with optional filtering. This endpoint returns events related to tote location changes and status updates.
+
+```http
+GET /api/movimientos
+```
+
+Alternatively, this same endpoint is also available at:
+
+```http
+GET /api/totes/movimientos
+```
+
+### Query Parameters
+
+<ParamField query="operador" type="string">
+  Filter movements by operator/user name (supports partial matching)
+</ParamField>
+
+<ParamField query="fechaDesde" type="datetime">
+  Start date for date range filter (ISO format, e.g., "2024-01-01")
+</ParamField>
+
+<ParamField query="fechaHasta" type="datetime">
+  End date for date range filter (ISO format, includes full day until 23:59:59)
+</ParamField>
+
+<ParamField query="ubicacion" type="string">
+  Filter by destination location name
+</ParamField>
+
+<ParamField query="modulo" type="string">
+  Filter by system module (e.g., "DESPACHO", "OPERADOR_TOTES", "LLENADO", "TOTES")
+</ParamField>
+
+<ParamField query="cliente" type="string">
+  Filter movements involving a specific client. Searches both current client and historical location/client data
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="movimientos" type="array" required>
+  Array of movement objects, ordered by date (newest first)
+  
+  <ResponseField name="id" type="integer">
+    Event identifier
+  </ResponseField>
+  
+  <ResponseField name="codigo" type="string">
+    Tote code
+  </ResponseField>
+  
+  <ResponseField name="cliente" type="string">
+    Current or historical client assignment
+  </ResponseField>
+  
+  <ResponseField name="operador" type="string">
+    User who performed the movement
+  </ResponseField>
+  
+  <ResponseField name="fecha" type="datetime">
+    Movement timestamp
+  </ResponseField>
+  
+  <ResponseField name="ubicacionAnterior" type="string">
+    Previous location
+  </ResponseField>
+  
+  <ResponseField name="nuevaUbicacion" type="string">
+    Destination location
+  </ResponseField>
+  
+  <ResponseField name="codigoRetail" type="string">
+    Generated retail code (if moved to Retail location)
+  </ResponseField>
+  
+  <ResponseField name="codigoBarra" type="string">
+    Tracking barcode associated with the movement
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="total" type="integer" required>
+  Total number of movements returned
+</ResponseField>
+
+### Example Request (Basic)
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Request (Filtered)
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos?fechaDesde=2024-01-01&fechaHasta=2024-01-31&cliente=Retail&operador=Juan" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "movimientos": [
+    {
+      "id": 1523,
+      "codigo": "T-001",
+      "cliente": "Retail",
+      "operador": "operador@example.com",
+      "fecha": "2024-01-15T14:23:45",
+      "ubicacionAnterior": "Almacenamiento",
+      "nuevaUbicacion": "Retail",
+      "codigoRetail": "RET-000042",
+      "codigoBarra": "SEG-000001"
+    },
+    {
+      "id": 1522,
+      "codigo": "T-002",
+      "cliente": "Retail",
+      "operador": "operador@example.com",
+      "fecha": "2024-01-15T14:15:30",
+      "ubicacionAnterior": "Almacenamiento",
+      "nuevaUbicacion": "Almacenamiento",
+      "codigoRetail": null,
+      "codigoBarra": "SEG-000125"
+    },
+    {
+      "id": 1498,
+      "codigo": "T-015",
+      "cliente": "Helados",
+      "operador": "juan.perez",
+      "fecha": "2024-01-15T10:30:00",
+      "ubicacionAnterior": "Lavado",
+      "nuevaUbicacion": "Helados",
+      "codigoRetail": null,
+      "codigoBarra": null
+    },
+    {
+      "id": 1475,
+      "codigo": "T-022",
+      "cliente": null,
+      "operador": "maria.gonzalez",
+      "fecha": "2024-01-14T16:45:00",
+      "ubicacionAnterior": "Retail",
+      "nuevaUbicacion": "Lavado",
+      "codigoRetail": null,
+      "codigoBarra": null
+    }
+  ],
+  "total": 4
+}
+```
+
+---
+
+## Movement Types
+
+The movements endpoint captures two main types of events:
+
+### 1. Location Changes (MOVER_TOTE)
+
+These movements represent physical tote relocations:
+- From storage to production areas
+- From production to dispatch
+- From dispatch to clients
+- Returns from clients to storage
+- Moves to maintenance/cleaning areas
+
+### 2. Status Updates (UPDATE_STATUS)
+
+These movements represent state changes:
+- Filling operations (empty → filled)
+- Emptying operations (filled → empty)
+- Status changes with location updates
+- Product assignment changes
+
+---
+
+## Filtering Examples
+
+### Filter by Operator
+
+Get all movements performed by operators with "Juan" in their name:
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos?operador=Juan" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Filter by Date Range
+
+Get movements from January 2024:
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos?fechaDesde=2024-01-01&fechaHasta=2024-01-31" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Filter by Client
+
+Get all movements related to Retail client:
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos?cliente=Retail" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+This searches for:
+- Totes currently assigned to the client
+- Movements TO locations with that client name
+- Movements FROM locations with that client name
+- Client assignments in movement history
+
+### Filter by Destination Location
+
+Get movements to a specific warehouse location:
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos?ubicacion=Retail" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Filter by Module
+
+Get movements from dispatch operations only:
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos?modulo=DESPACHO" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Combined Filters
+
+Get Retail movements by a specific operator in a date range:
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos?cliente=Retail&operador=operador@example.com&fechaDesde=2024-01-01&fechaHasta=2024-01-31" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## Understanding Movement Data
+
+### Location Changes
+
+When a tote moves locations:
+- `ubicacionAnterior`: Where the tote was before
+- `nuevaUbicacion`: Where the tote is now
+- `operador`: Who performed the move
+- `codigoRetail`: Generated if moved to Retail (format: RET-XXXXXX)
+
+### Status Updates
+
+When a tote status changes (e.g., filling):
+- Location may stay the same or change
+- `codigoBarra`: May be generated for finished products (format: SEG-XXXXXX)
+- Product, lot, and client information is tracked in the event details
+
+### Client Tracking
+
+The client filter is intelligent:
+- Searches movement history, not just current tote state
+- Includes movements TO client locations
+- Includes movements FROM client locations
+- Includes historical client assignments
+- Useful for tracking tote usage per client over time
+
+---
+
+## Common Use Cases
+
+### Audit Trail
+
+Track all movements for compliance:
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos?fechaDesde=2024-01-01&fechaHasta=2024-01-31" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Operator Performance
+
+Monitor operator activity:
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos?operador=operador@example.com&fechaDesde=2024-01-15" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Client Billing
+
+Track client usage for billing:
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos?cliente=Retail&fechaDesde=2024-01-01&fechaHasta=2024-01-31" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Location Activity
+
+Monitor specific location usage:
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/movimientos?ubicacion=Almacenamiento" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## Error Handling
+
+The movements endpoint returns consistent error responses:
+
+### Server Error (500)
+
+```json
+{
+  "success": false,
+  "message": "Error al obtener movimientos",
+  "error": "Detailed error message"
+}
+```
+
+### Empty Results
+
+When no movements match the filters:
+
+```json
+{
+  "success": true,
+  "movimientos": [],
+  "total": 0
+}
+```

@@ -1,0 +1,541 @@
+---
+title: Database Version History
+description: Complete changelog of database schema changes, migrations, and version updates for DitzlerTotes
+---
+
+## Overview
+
+This page documents all database schema changes, migrations, and version updates for the DitzlerTotes system. Each version includes detailed information about changes, migration requirements, and breaking changes.
+
+## Current Version
+
+<Note>
+  **Current Version**: v3.1 (January 2026)
+  
+  **Database Name**: Ditzler
+  
+  **SQL Server Compatibility**: 2016+
+</Note>
+
+## Version History
+
+### v3.1 (January 2026) - Consolidation Update
+
+**Release Date**: 2026-01-27
+
+**Type**: Major schema update and consolidation
+
+#### Changes
+
+**New Tables**
+- Added comprehensive `Productos` table with Ingredientes and Clientes columns
+- Added comprehensive `Ubicaciones` table with Area and ClientesAsignados columns
+- Standardized `Llenados_Totes` table structure
+
+**Schema Updates - Totes**
+- ✅ Added `CodigoRetail` column for retail tracking codes
+- ✅ Added `UsuarioModificacion` column for audit trail
+- ✅ Added `FechaRetorno` column (auto-calculated as FechaDespacho + 30 days)
+- ✅ Renamed `Operador` column to `Usuario` for consistency
+- ❌ Removed `FechaVencimiento` column (moved to Productos table)
+- ❌ Removed `FechaEnvasado` column (no longer needed)
+
+**Schema Updates - Clientes**
+- ✅ Added `UbicacionDefecto` column for default client locations
+
+**Schema Updates - Productos**
+- ✅ Added `Ingredientes` column (NVARCHAR(MAX)) for ingredient lists
+- ✅ Added `Clientes` column (NVARCHAR(MAX)) for client associations
+- ✅ Added `FechaVencimiento` column (moved from Totes)
+
+**Schema Updates - Ubicaciones**
+- ✅ Added `Area` column (default: 'General')
+- ✅ Added `ClientesAsignados` column for multi-client assignments
+
+**Schema Updates - Llenados_Totes**
+- ✅ Added `Sincronizado` column (BIT) for sync status tracking
+- ✅ Added `CodigoBarra` column for barcode integration
+- ✅ Renamed `Operador` to `Usuario` for consistency
+- ✅ Extended `RFID_Tag` to NVARCHAR(100)
+- ✅ Extended `Producto` to NVARCHAR(255)
+
+**New Functions**
+- `FN_GenerarCodigoSeguimiento()` - Generates tracking codes (COD-XXXXXX format)
+- Enhanced `FN_GenerarCodigoTote()` - Improved tote code generation
+- Maintained `FN_DiasHastaVencimiento()` - Days until expiration calculator
+
+**Stored Procedures**
+- Updated `SP_EstadisticasDashboard` to handle removed FechaVencimiento
+- Updated `SP_CrearTote` to support new FechaRetorno logic
+- Maintained all 6 core stored procedures
+
+**Data Seeding**
+- Added 9 operational locations (Almacén, Mantenimiento, Despacho, etc.)
+- Created default users for all roles
+- Updated admin credentials
+
+#### Migration Requirements
+
+<Warning>
+  This version requires running two migration scripts in sequence.
+</Warning>
+
+```sql
+-- 1. Execute master installation (for new installs)
+USE master;
+EXEC('source/docs/DitzlerDB_Master.sql');
+
+-- 2. For existing databases, run migrations:
+-- Migration 1: Move FechaVencimiento
+USE Ditzler;
+EXEC('source/docs/migrate_fecha_vencimiento.sql');
+
+-- Migration 2: Add FechaRetorno
+USE Ditzler;
+EXEC('source/docs/add_fecha_retorno.sql');
+```
+
+#### Breaking Changes
+
+- ⚠️ **FechaVencimiento removed from Totes** - Now stored at product level
+- ⚠️ **FechaEnvasado removed from Totes** - No longer tracked
+- ⚠️ **Column renamed**: Operador → Usuario (in Totes and Llenados_Totes)
+- ⚠️ **API changes**: Endpoints expecting Totes.FechaVencimiento must be updated
+
+#### Impact
+
+**Tables Modified**: 5 (Totes, Productos, Clientes, Ubicaciones, Llenados_Totes)
+
+**Stored Procedures Updated**: 2 (SP_EstadisticasDashboard, SP_CrearTote)
+
+**Indexes Dropped**: 2 (IX_Totes_FechaVencimiento, IX_Totes_Dashboard)
+
+**Data Migration**: Automatic for FechaRetorno; manual review needed for FechaVencimiento
+
+---
+
+### v1.4.0 (December 2024) - Multi-Feature Release
+
+**Release Date**: December 2024
+
+**Type**: Feature addition and enhancement
+
+#### Changes
+
+**New Features**
+- ✅ Added Products and Locations management
+- ✅ Implemented user preferences system
+- ✅ Added customizable menu ordering
+- ✅ Created operator history tracking for totes and dispatch
+- ✅ Added records view with export functionality
+- ✅ Enhanced alert system
+
+**Schema Updates**
+- Added `Productos` table with categories (Dulces, Aceites, Jarabes, Esencias)
+- Added `Ubicaciones` table with types (Almacén, Producción, Despacho, Mantenimiento)
+- Added `Preferencias` column to Usuarios table (NVARCHAR(MAX) JSON)
+- Enhanced `Eventos` table with additional audit fields
+
+**Role System**
+- ✅ Implemented multi-role support (comma-separated roles per user)
+- Updated Rol column to NVARCHAR(500) to support multiple roles
+- Added role validation in stored procedures
+
+**Stored Procedures**
+- Created procedures for product CRUD operations
+- Created procedures for location CRUD operations
+- Updated user procedures to handle preferences
+
+#### Migration Script
+
+```sql
+-- Add Preferencias column to Usuarios
+IF NOT EXISTS (
+    SELECT * FROM sys.columns 
+    WHERE object_id = OBJECT_ID('Usuarios') 
+    AND name = 'Preferencias'
+)
+BEGIN
+    ALTER TABLE Usuarios ADD Preferencias NVARCHAR(MAX) NULL;
+    PRINT '✅ Column Preferencias added to Usuarios.';
+END
+
+-- Extend Rol column for multi-role support
+ALTER TABLE Usuarios ALTER COLUMN Rol NVARCHAR(500) NOT NULL;
+PRINT '✅ Rol column extended to 500 characters.';
+
+-- Create Productos table
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Productos')
+BEGIN
+    CREATE TABLE Productos (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        Nombre NVARCHAR(100) NOT NULL,
+        Descripcion NVARCHAR(500) NULL,
+        Codigo NVARCHAR(50) NULL,
+        Categoria NVARCHAR(50) NULL,
+        Estado NVARCHAR(20) NOT NULL DEFAULT 'Activo',
+        FechaCreacion DATETIME DEFAULT GETDATE(),
+        FechaModificacion DATETIME DEFAULT GETDATE()
+    );
+    PRINT '✅ Table Productos created.';
+END
+
+-- Create Ubicaciones table
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Ubicaciones')
+BEGIN
+    CREATE TABLE Ubicaciones (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        Nombre NVARCHAR(100) NOT NULL,
+        Descripcion NVARCHAR(500) NULL,
+        Codigo NVARCHAR(50) NULL,
+        Tipo NVARCHAR(50) NULL,
+        Capacidad INT NULL,
+        Estado NVARCHAR(20) NOT NULL DEFAULT 'Activo',
+        FechaCreacion DATETIME DEFAULT GETDATE(),
+        FechaModificacion DATETIME DEFAULT GETDATE()
+    );
+    PRINT '✅ Table Ubicaciones created.';
+END
+```
+
+#### Impact
+
+**Tables Added**: 2 (Productos, Ubicaciones)
+
+**Tables Modified**: 2 (Usuarios, Eventos)
+
+**New API Endpoints**: 8+ endpoints for products and locations
+
+---
+
+### v1.3.0 (December 2024) - Audit & Security
+
+**Release Date**: December 2024
+
+**Type**: Security and audit enhancement
+
+#### Changes
+
+**New Features**
+- ✅ Centralized audit system
+- ✅ Enhanced security middleware
+- ✅ Operator filling panel
+- ✅ Comprehensive event logging
+
+**Schema Updates - Eventos Table**
+- Added `IpAddress` column (NVARCHAR(45))
+- Added `UserAgent` column (NVARCHAR(500))
+- Added `Severidad` column (NVARCHAR(20)) - Debug/Info/Warning/Error/Critical
+- Added `Modulo` column (NVARCHAR(50))
+- Added `Accion` column (NVARCHAR(100))
+- Added `ResultadoExitoso` column (BIT)
+- Added `TiempoEjecucion` column (INT) - milliseconds
+- Added `SessionId` column (NVARCHAR(100))
+
+**Stored Procedures**
+- Created `SP_RegistrarEvento` for centralized event logging
+- Created `SP_BuscarEventos` with advanced filtering
+- Created `SP_LimpiarEventosAntiguos` for maintenance
+
+**Indexes**
+- Added index on Eventos.FechaEvento for query performance
+- Added index on Eventos.Usuario for user activity tracking
+- Added index on Eventos.Severidad for alert filtering
+
+#### Migration Script
+
+```sql
+-- Enhance Eventos table with audit fields
+ALTER TABLE Eventos ADD IpAddress NVARCHAR(45) NULL;
+ALTER TABLE Eventos ADD UserAgent NVARCHAR(500) NULL;
+ALTER TABLE Eventos ADD Severidad NVARCHAR(20) NOT NULL DEFAULT 'Info';
+ALTER TABLE Eventos ADD Modulo NVARCHAR(50) NULL;
+ALTER TABLE Eventos ADD Accion NVARCHAR(100) NULL;
+ALTER TABLE Eventos ADD ResultadoExitoso BIT NOT NULL DEFAULT 1;
+ALTER TABLE Eventos ADD TiempoEjecucion INT NULL;
+ALTER TABLE Eventos ADD SessionId NVARCHAR(100) NULL;
+
+-- Create indexes
+CREATE INDEX IX_Eventos_FechaEvento ON Eventos(FechaEvento DESC);
+CREATE INDEX IX_Eventos_Usuario ON Eventos(Usuario);
+CREATE INDEX IX_Eventos_Severidad ON Eventos(Severidad);
+
+PRINT '✅ Audit enhancements completed.';
+```
+
+#### Impact
+
+**Tables Modified**: 1 (Eventos)
+
+**Stored Procedures Added**: 3
+
+**Indexes Added**: 3
+
+---
+
+### v1.2.0 (November 2024) - Dashboard & Clients
+
+**Release Date**: November 2024
+
+**Type**: Feature addition
+
+#### Changes
+
+**New Features**
+- ✅ Dashboard with real-time KPIs
+- ✅ Client management system
+- ✅ Role-based access control
+- ✅ Advanced metrics and statistics
+
+**New Tables**
+- Created `Clientes` table with comprehensive client information
+  - Contact details
+  - Address information
+  - Company logo support
+  - Status tracking
+  - Notes field
+
+**Schema Updates**
+- Added `Cliente` column to Totes table (NVARCHAR(255))
+- Added foreign key relationship between Totes and Clientes
+
+**Stored Procedures**
+- Created `SP_EstadisticasDashboard` for KPI calculations
+- Created client CRUD procedures
+
+#### Migration Script
+
+```sql
+-- Create Clientes table
+CREATE TABLE Clientes (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    logo NVARCHAR(500) NULL,
+    nombre_empresa NVARCHAR(255) NOT NULL,
+    contacto_principal NVARCHAR(255) NOT NULL,
+    email NVARCHAR(255) NULL,
+    telefono NVARCHAR(20) NULL,
+    direccion NVARCHAR(500) NULL,
+    ciudad NVARCHAR(100) NULL,
+    pais NVARCHAR(100) NULL,
+    codigo_postal NVARCHAR(20) NULL,
+    tipo NVARCHAR(50) NULL,
+    estado NVARCHAR(20) NOT NULL DEFAULT 'Activo',
+    fecha_registro DATETIME NOT NULL DEFAULT GETDATE(),
+    fecha_modificacion DATETIME NOT NULL DEFAULT GETDATE(),
+    notas NVARCHAR(MAX) NULL
+);
+
+-- Add Cliente column to Totes
+ALTER TABLE Totes ADD Cliente NVARCHAR(255) NULL;
+
+-- Create indexes
+CREATE INDEX IX_Clientes_Email ON Clientes(email);
+CREATE INDEX IX_Clientes_Estado ON Clientes(estado);
+CREATE INDEX IX_Totes_Cliente ON Totes(Cliente);
+
+PRINT '✅ Dashboard and client features added.';
+```
+
+#### Impact
+
+**Tables Added**: 1 (Clientes)
+
+**Tables Modified**: 1 (Totes)
+
+**Stored Procedures Added**: 5+
+
+---
+
+### v1.0.0 (October 2024) - Initial Release
+
+**Release Date**: October 2024
+
+**Type**: Initial database creation
+
+#### Core Tables Created
+
+**Usuarios Table**
+- User authentication and management
+- Role-based access control
+- Password hashing with bcrypt
+- Status tracking (Activo/Inactivo)
+
+**Totes Table**
+- Container tracking and management
+- State management (Disponible, En Uso, Mantenimiento, Fuera de Servicio)
+- Location tracking
+- Date tracking (creation, modification, dispatch)
+- Soft delete support (Activo bit)
+
+**Eventos Table**
+- Basic event logging
+- Tote relationship tracking
+- User activity tracking
+- Timestamp tracking
+
+**Llenados_Totes Table**
+- Filling operations tracking
+- Weight measurements (bruto, neto, tara)
+- Product and lot tracking
+- RFID tag association
+
+#### Core Functions
+
+```sql
+-- FN_GenerarCodigoTote
+-- Generates unique tote codes in format TOTE-0001
+CREATE FUNCTION FN_GenerarCodigoTote()
+RETURNS NVARCHAR(20)
+AS
+BEGIN
+    DECLARE @codigo NVARCHAR(20);
+    DECLARE @contador INT;
+    SELECT @contador = ISNULL(MAX(CAST(SUBSTRING(Codigo, 6, LEN(Codigo)-5) AS INT)), 0) + 1
+    FROM Totes 
+    WHERE Codigo LIKE 'TOTE-%' 
+    AND ISNUMERIC(SUBSTRING(Codigo, 6, LEN(Codigo)-5)) = 1;
+    SET @codigo = 'TOTE-' + RIGHT('0000' + CAST(@contador AS NVARCHAR), 4);
+    RETURN @codigo;
+END
+```
+
+#### Core Stored Procedures
+
+- `SP_ValidarLogin` - User authentication
+- `SP_CrearUsuario` - User creation with validation
+- `SP_CrearTote` - Tote creation with auto-code generation
+
+#### Indexes Created
+
+- Unique index on Usuarios.Email
+- Unique index on Totes.Codigo
+- Index on Totes.Estado for filtering
+- Index on Totes.FechaCreacion for sorting
+- Index on Eventos.FechaEvento for log queries
+
+#### Initial Data
+
+```sql
+-- Default admin user
+INSERT INTO Usuarios (Nombre, Apellido, Password, Email, Rol, Estado)
+VALUES ('Admin', 'Sistema', 'admin123', 'admin@ditzler.com', 'Administrador', 'Activo');
+```
+
+---
+
+## Schema Statistics
+
+### Current Database Size
+
+| Object Type | Count |
+|-------------|-------|
+| Tables | 7 |
+| Stored Procedures | 6+ |
+| Functions | 3 |
+| Indexes | 39+ |
+| Foreign Keys | 2 |
+| Check Constraints | 10+ |
+
+### Table Row Estimates
+
+<Note>
+  These are typical production estimates. Actual sizes vary by deployment.
+</Note>
+
+| Table | Typical Size | Growth Rate |
+|-------|--------------|-------------|
+| Totes | 1,000 - 10,000 | Steady |
+| Eventos | 100,000+ | High |
+| Llenados_Totes | 10,000 - 50,000 | Medium |
+| Clientes | 50 - 500 | Low |
+| Usuarios | 10 - 100 | Very Low |
+| Productos | 50 - 500 | Low |
+| Ubicaciones | 20 - 100 | Very Low |
+
+## Migration Scripts Reference
+
+### Available Scripts
+
+| Script | Purpose | Version |
+|--------|---------|----------|
+| `DitzlerDB_Master.sql` | Complete installation from scratch | v3.1 |
+| `migrate_fecha_vencimiento.sql` | Move expiration dates to products | v3.1 |
+| `add_fecha_retorno.sql` | Add return date tracking | v3.1 |
+
+### Script Locations
+
+All migration scripts are located in:
+```
+~/workspace/source/docs/
+├── DitzlerDB_Master.sql          (536 lines)
+├── migrate_fecha_vencimiento.sql (126 lines)
+└── add_fecha_retorno.sql         (77 lines)
+```
+
+## Deprecation Notice
+
+### Deprecated Features
+
+<Warning>
+  The following features have been deprecated and will be removed in future versions.
+</Warning>
+
+| Feature | Deprecated In | Remove In | Alternative |
+|---------|---------------|-----------|-------------|
+| Totes.FechaVencimiento | v3.1 | - | Use Productos.FechaVencimiento |
+| Totes.FechaEnvasado | v3.1 | - | Not tracked |
+| Totes.Operador column | v3.1 | - | Use Totes.Usuario |
+| Llenados_Totes.Operador | v3.1 | - | Use Llenados_Totes.Usuario |
+
+## Upgrade Paths
+
+### From v1.0.0 to v3.1
+
+<Steps>
+
+1. Backup your current database
+2. Run all intermediate migration scripts
+3. Execute DitzlerDB_Master.sql with caution
+4. Run migrate_fecha_vencimiento.sql
+5. Run add_fecha_retorno.sql
+6. Verify all data and test application
+
+</Steps>
+
+### From v1.4.0 to v3.1
+
+<Steps>
+
+1. Backup database
+2. Run migrate_fecha_vencimiento.sql
+3. Run add_fecha_retorno.sql
+4. Update application code for renamed columns
+5. Test thoroughly
+
+</Steps>
+
+## Next Release (Planned)
+
+### v4.0 (Estimated: Q2 2026)
+
+**Planned Features**
+- Enhanced reporting system
+- Real-time notifications
+- Advanced analytics
+- IoT device integration
+- Automated backup system
+
+**Planned Schema Changes**
+- New Reportes table
+- New Notificaciones table
+- Enhanced Eventos with more metrics
+- Performance optimizations
+
+---
+
+## Additional Resources
+
+- [Migration Guide](/database/migration-guide) - Step-by-step migration procedures
+- [Database README](source/database/README.md) - Additional technical documentation
+- [API Documentation](/api/overview) - REST API endpoints
+- [System Architecture](/) - Overall system design

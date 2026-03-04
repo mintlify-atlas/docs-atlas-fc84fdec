@@ -1,0 +1,397 @@
+---
+title: Client management
+description: Manage customer information, contacts, and tote assignments
+---
+
+The client management system in DitzlerTotes allows you to track customer information, manage contact details, and monitor tote assignments to each client.
+
+## Overview
+
+Clients represent the companies or organizations that receive totes for their operations. The system maintains comprehensive client profiles including contact information, addresses, and tote assignment history.
+
+<CardGroup cols={2}>
+  <Card title="Contact Management" icon="address-book">
+    Store detailed contact information and addresses
+  </Card>
+  <Card title="Logo Support" icon="image">
+    Upload and display client logos
+  </Card>
+  <Card title="Tote Tracking" icon="box">
+    Monitor totes assigned to each client
+  </Card>
+  <Card title="Status Management" icon="toggle-on">
+    Active/Inactive client status tracking
+  </Card>
+</CardGroup>
+
+## Client Data Model
+
+Clients are stored in the `Clientes` table with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| **id** | int | Primary key |
+| **nombre_empresa** | nvarchar(255) | Company name (required, unique) |
+| **contacto_principal** | nvarchar(255) | Primary contact person |
+| **email** | nvarchar(255) | Email address (unique) |
+| **telefono** | nvarchar(20) | Phone number |
+| **direccion** | nvarchar(500) | Street address |
+| **ciudad** | nvarchar(100) | City |
+| **pais** | nvarchar(100) | Country |
+| **codigo_postal** | nvarchar(20) | Postal/ZIP code |
+| **tipo** | nvarchar(50) | Client type (Distribuidor, Fabricante, etc.) |
+| **estado** | nvarchar(20) | Status: Activo or Inactivo |
+| **logo** | nvarchar(500) | Logo file path |
+| **notas** | nvarchar(MAX) | Additional notes |
+| **fecha_registro** | datetime | Registration date |
+| **fecha_modificacion** | datetime | Last modified date |
+
+## Client Operations
+
+### List All Clients
+
+Retrieve all clients (admin view):
+
+```bash
+curl -X POST http://localhost:3000/api/admin/clientes \
+  -H "Content-Type: application/json" \
+  -d '{"action": "list"}'
+```
+
+For operators (active clients only):
+
+```bash
+curl -X GET http://localhost:3000/api/clientes
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "clientes": [
+    {
+      "id": 1,
+      "nombre_empresa": "Distribuidora del Norte",
+      "contacto_principal": "Maria Gonzalez",
+      "email": "maria@distribuidora.com",
+      "telefono": "+1-555-0123",
+      "estado": "Activo",
+      "fecha_registro": "2024-01-15T10:00:00"
+    }
+  ]
+}
+```
+
+### Create New Client
+
+Add a new client to the system:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/clientes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "create",
+    "clientData": {
+      "nombre_empresa": "Helados Premium SA",
+      "contacto_principal": "Carlos Rodriguez",
+      "email": "carlos@heladospremium.com",
+      "telefono": "+1-555-0199",
+      "direccion": "Av. Industrial 456",
+      "ciudad": "Monterrey",
+      "pais": "Mexico",
+      "codigo_postal": "64000",
+      "tipo": "Fabricante",
+      "estado": "Activo"
+    }
+  }'
+```
+
+<Steps>
+  <Step title="Validate Data">
+    System validates required fields (nombre_empresa, contacto_principal)
+  </Step>
+  <Step title="Check Duplicates">
+    Verifies company name and email are unique
+  </Step>
+  <Step title="Insert Record">
+    Creates new client record in Clientes table
+  </Step>
+  <Step title="Audit Log">
+    Records creation event with client details
+  </Step>
+</Steps>
+
+### Update Client
+
+Modify existing client information:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/clientes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "update",
+    "clientData": {
+      "id": 1,
+      "nombre_empresa": "Distribuidora del Norte SA",
+      "contacto_principal": "Maria Gonzalez Lopez",
+      "email": "maria@distribuidora.com",
+      "telefono": "+1-555-0123",
+      "estado": "Activo"
+    }
+  }'
+```
+
+### Delete Client
+
+Remove a client from the system:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/clientes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "delete",
+    "clientData": {
+      "id": 1
+    }
+  }'
+```
+
+<Warning>
+Deleting a client will fail if there are active totes assigned to them. Set client status to "Inactivo" instead to preserve history.
+</Warning>
+
+## Client Types
+
+Clients can be categorized by type:
+
+- **Distribuidor** - Distribution companies
+- **Fabricante** - Manufacturing facilities  
+- **Minorista** - Retail locations
+- **Exportador** - Export companies
+- **Otro** - Other client types
+
+<Tip>
+Use consistent client types across your organization for better reporting and analytics.
+</Tip>
+
+## Client Status
+
+### Active
+
+- Appears in operator interfaces for tote assignment
+- Can receive new tote dispatches
+- Included in standard reports
+- Visible in client lists
+
+### Inactive
+
+- Hidden from operator interfaces
+- Cannot receive new tote assignments
+- Excluded from standard reports
+- Still visible to administrators
+- Preserves historical data
+
+## Logo Management
+
+Clients can have custom logos displayed:
+
+```javascript
+// Logo file path stored in database
+{
+  "logo": "/uploads/clientes/logo-distribuidora-norte.png"
+}
+```
+
+### Logo Upload Process
+
+<Steps>
+  <Step title="Select Image">
+    User selects logo file (PNG, JPG, or SVG)
+  </Step>
+  <Step title="Validate File">
+    System checks file type and size (max 2MB)
+  </Step>
+  <Step title="Upload">
+    File uploaded to `/public/uploads/clientes/` directory
+  </Step>
+  <Step title="Update Database">
+    Logo path saved to cliente record
+  </Step>
+</Steps>
+
+## Tote Assignment Tracking
+
+Monitor which totes are assigned to each client:
+
+```sql
+-- Query totes by client
+SELECT 
+  t.Codigo,
+  t.Estado,
+  t.Producto,
+  t.FechaDespacho,
+  t.FechaVencimiento
+FROM Totes t
+WHERE t.Cliente = 'Distribuidora del Norte'
+  AND t.Activo = 1
+ORDER BY t.FechaDespacho DESC;
+```
+
+This information is displayed in:
+
+- Client detail view
+- Tote management interface
+- Dispatch reports
+- Client activity dashboard
+
+## Service Implementation
+
+The client management logic is in `services/clients.service.js`:
+
+```javascript
+// Key functions
+
+// Get all clients or filter by status
+async function list(filtroEstado = null) {
+  // Returns all clients or filtered by Activo/Inactivo
+}
+
+// Create new client with validation
+async function create(clientData, currentUser, req) {
+  // Validates, inserts, and audits
+}
+
+// Update existing client
+async function update(clientData, currentUser, req) {
+  // Updates with before/after audit trail
+}
+
+// Delete client (soft delete)
+async function deleteClient(clientId, currentUser, req) {
+  // Sets Activo = 0 or hard deletes if no dependencies
+}
+```
+
+## UI Components
+
+The client management interface (`pages/clientes.html`) includes:
+
+### Client Table
+
+- Sortable columns (Company, Contact, Email, Status)
+- Search functionality
+- Filter by status (Active/Inactive)
+- Click to view details
+
+### Client Form
+
+- All fields with validation
+- Logo upload widget
+- Address autocomplete
+- Status toggle
+- Notes text area
+
+### Client Details
+
+- Contact information display
+- Logo preview
+- List of assigned totes
+- Recent activity history
+- Edit and delete buttons
+
+## Validation Rules
+
+<AccordionGroup>
+  <Accordion title="Company Name">
+    - Required field
+    - Must be unique
+    - Maximum 255 characters
+    - Cannot contain special SQL characters
+  </Accordion>
+  
+  <Accordion title="Email Address">
+    - Must be valid email format
+    - Must be unique if provided
+    - Optional field
+    - Used for notifications
+  </Accordion>
+  
+  <Accordion title="Phone Number">
+    - Optional field
+    - Maximum 20 characters
+    - Accepts international formats
+  </Accordion>
+  
+  <Accordion title="Address Fields">
+    - All optional
+    - Used for shipping and logistics
+    - Direccion: max 500 characters
+    - Ciudad: max 100 characters
+    - Codigo_postal: max 20 characters
+  </Accordion>
+</AccordionGroup>
+
+## Audit Trail
+
+All client operations are logged:
+
+```javascript
+// Create event
+{
+  "TipEvento": "Creacion",
+  "Modulo": "CLIENTES",
+  "Descripcion": "Cliente 'Helados Premium SA' creado",
+  "DatosAdicionales": {
+    "clienteId": 5,
+    "nombre_empresa": "Helados Premium SA",
+    "contacto_principal": "Carlos Rodriguez"
+  }
+}
+
+// Update event
+{
+  "TipEvento": "Actualizacion",
+  "Modulo": "CLIENTES",
+  "Descripcion": "Cliente 'Distribuidora del Norte' actualizado",
+  "DatosAdicionales": {
+    "clienteId": 1,
+    "valoresAnteriores": { "telefono": "+1-555-0100" },
+    "valoresNuevos": { "telefono": "+1-555-0123" }
+  }
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Keep contact info current" icon="phone">
+    Regularly update phone numbers and emails to ensure communication
+  </Card>
+  <Card title="Use descriptive names" icon="building">
+    Use full legal company names for clarity in reports
+  </Card>
+  <Card title="Document client type" icon="tags">
+    Assign accurate client types for better analytics
+  </Card>
+  <Card title="Deactivate, don't delete" icon="archive">
+    Set status to Inactive to preserve historical data
+  </Card>
+</CardGroup>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="API: Clients" icon="code" href="/api/clients">
+    Client management API reference
+  </Card>
+  <Card title="Tote Management" icon="box" href="/features/tote-management">
+    Assigning totes to clients
+  </Card>
+  <Card title="Dispatch Operator" icon="truck" href="/operators/dispatch-operator">
+    Sending totes to clients
+  </Card>
+  <Card title="Audit System" icon="clipboard-check" href="/features/audit-system">
+    Tracking client-related changes
+  </Card>
+</CardGroup>

@@ -1,0 +1,440 @@
+---
+title: Operator interfaces
+description: Specialized workflows for filling, tote movement, and dispatch operations
+---
+
+DitzlerTotes provides three specialized operator interfaces, each optimized for specific workflows and designed for touch-screen and mobile use.
+
+## Overview
+
+Operator interfaces are streamlined, single-purpose UIs that guide users through specific tasks without the complexity of the administrative dashboard.
+
+<CardGroup cols={3}>
+  <Card title="Filling Operator" icon="fill-drip">
+    Fill empty totes with products and register weights
+  </Card>
+  <Card title="Tote Operator" icon="dolly">
+    Move totes between locations and update status
+  </Card>
+  <Card title="Dispatch Operator" icon="truck">
+    Prepare totes for dispatch to clients
+  </Card>
+</CardGroup>
+
+## Interface Design Principles
+
+All operator interfaces follow these design principles:
+
+### Mobile-First Design
+
+- Touch-optimized buttons (minimum 44x44px)
+- Large, clear text for readability
+- Minimal scrolling required
+- Landscape and portrait support
+
+### Workflow-Driven
+
+- Step-by-step guided process
+- Clear visual feedback at each step
+- Validation before proceeding
+- Quick reset to start over
+
+### Real-Time Updates
+
+- Immediate feedback on actions
+- Toast notifications for success/errors
+- Live status updates
+- No page refreshes needed
+
+## Filling Operator Interface
+
+### Access
+
+- **URL**: `/pages/operador-llenado.html`
+- **Role Required**: Operador de Llenado de Totes
+- **Mobile Version**: `/pages/operador-llenado-mobile.html`
+
+### Workflow
+
+<Steps>
+  <Step title="Scan/Enter Tote Code">
+    Operator scans RFID tag or manually enters tote code
+  </Step>
+  <Step title="Validate Tote">
+    System checks tote exists and is in DISPONIBLE state
+  </Step>
+  <Step title="Select Product">
+    Choose product from dropdown (auto-filtered to active products)
+  </Step>
+  <Step title="Enter Details">
+    Input batch number, weight, and dates
+  </Step>
+  <Step title="Generate Barcode">
+    System auto-generates tracking barcode
+  </Step>
+  <Step title="Save & Print">
+    Save tote data and print label
+  </Step>
+</Steps>
+
+### Key Features
+
+```javascript
+// Auto-batch generation
+// GET /api/operador/lote/next
+{
+  "success": true,
+  "lote": "LOTE-240115"  // Auto-incremented
+}
+
+// Barcode generation
+// GET /api/operador/barcode/generate
+{
+  "success": true,
+  "barcode": "COD-000123"  // Sequential tracking code
+}
+```
+
+### UI Components
+
+- **RFID Input**: Large text input for scanner integration
+- **Product Dropdown**: Searchable product selector
+- **Batch Input**: Auto-populated with next batch number
+- **Weight Input**: Numeric input with kg unit
+- **Date Pickers**: Filling and expiration dates
+- **Save Button**: Large, prominent save action
+- **History Table**: Recent fillings for reference
+
+<Info>
+The mobile version removes the history table and focuses only on the filling form for smaller screens.
+</Info>
+
+## Tote Operator Interface
+
+### Access
+
+- **URL**: `/pages/operador-totes.html`
+- **Role Required**: Operador de Totes
+- **History View**: `/pages/operador-totes-historial.html`
+
+### Workflow
+
+<Steps>
+  <Step title="Scan Tote">
+    Scan or enter tote code to identify
+  </Step>
+  <Step title="View Current Status">
+    System shows current location and status
+  </Step>
+  <Step title="Select Destination">
+    Choose from 4 routing options:
+    - Reprocessing
+    - Waste disposal
+    - Washing station
+    - Maintenance
+  </Step>
+  <Step title="Confirm Movement">
+    Review and confirm the movement
+  </Step>
+  <Step title="Update Status">
+    System updates tote location and clears content if needed
+  </Step>
+</Steps>
+
+### Routing Logic
+
+The interface implements smart routing:
+
+```javascript
+// From js/operador-totes.js
+const DESTINATIONS = {
+  'REPROCESO': {
+    ubicacion: 'Reproceso',
+    clearContent: true,
+    requiresNote: false
+  },
+  'RESIDUOS': {
+    ubicacion: 'Residuos',
+    clearContent: true,
+    requiresNote: true  // Reason for waste
+  },
+  'LAVADO': {
+    ubicacion: 'Lavado',
+    clearContent: true,
+    requiresNote: false
+  },
+  'MANTENIMIENTO': {
+    ubicacion: 'Mantenimiento',
+    clearContent: false,
+    requiresNote: true  // Maintenance reason
+  }
+};
+```
+
+### Business Rules
+
+<AccordionGroup>
+  <Accordion title="Content Clearing">
+    When a tote is routed to Reprocessing, Waste, or Washing, all product information (product name, batch, weight, dates) is automatically cleared.
+  </Accordion>
+  
+  <Accordion title="Event Logging">
+    Every movement creates an event in the Eventos table with:
+    - Source location
+    - Destination location
+    - Operator name
+    - Timestamp
+    - Previous tote state
+  </Accordion>
+  
+  <Accordion title="Status Transitions">
+    The system enforces valid status transitions. For example, a DISPONIBLE tote cannot go directly to DESPACHADO without being LLENO first.
+  </Accordion>
+</AccordionGroup>
+
+### UI Components
+
+- **Tote Scanner**: RFID/barcode input
+- **Current Info Card**: Shows tote's current state
+- **Destination Buttons**: Large, color-coded routing options
+- **Notes Field**: Optional notes for movement
+- **Confirm Dialog**: Final confirmation before action
+- **Recent Movements**: Last 10 operations
+
+## Dispatch Operator Interface
+
+### Access
+
+- **URL**: `/pages/operador-despacho.html`
+- **Role Required**: Operador de Despacho
+- **History View**: `/pages/operador-despacho-historial.html`
+
+### Workflow
+
+<Steps>
+  <Step title="Scan Tote">
+    Identify tote to be dispatched
+  </Step>
+  <Step title="Validate State">
+    System checks tote is LLENO (filled)
+  </Step>
+  <Step title="Choose Routing">
+    Select between:
+    - Internal storage (Retail, Helados, Preparados, Trasvase, Almacenamiento)
+    - External client dispatch
+  </Step>
+  <Step title="Select Client/System">
+    Choose destination from dropdown
+  </Step>
+  <Step title="Confirm Dispatch">
+    System updates tote status to DESPACHADO and logs movement
+  </Step>
+</Steps>
+
+### Internal vs External Routing
+
+```javascript
+// Internal clients (special handling)
+const INTERNAL_CLIENTS = [
+  'Retail',         // Generates CodigoRetail
+  'Helados',
+  'Preparados',
+  'Trasvase',
+  'Almacenamiento'
+];
+
+// External clients
+// All other clients from Clientes table with Estado = 'Activo'
+```
+
+### Retail Code Generation
+
+When dispatching to Retail:
+
+```javascript
+// Special tracking code generated
+const codigoRetail = `RET-${Date.now()}`;
+
+// Stored in Totes.CodigoRetail field
+// Used for retail inventory tracking
+```
+
+### UI Components
+
+- **Tote Scanner**: RFID/barcode input
+- **Routing Selector**: Radio buttons for internal/external
+- **Client Dropdown**: Filtered by routing choice
+- **Location Modal**: Secondary location selection
+- **Success Message**: Shows tracking codes
+- **Dispatch History**: Recent dispatches with codes
+
+## History Views
+
+Each operator interface has a companion history view:
+
+### Filling History
+
+- **URL**: `/pages/operador-llenado-historial.html`
+- **Shows**: All filling operations with filters
+- **Filters**: Date range, operator, product, batch
+
+### Tote Movement History
+
+- **URL**: `/pages/operador-totes-historial.html`
+- **Shows**: All tote movements between locations
+- **Filters**: Date range, operator, source/destination location
+
+### Dispatch History
+
+- **URL**: `/pages/operador-despacho-historial.html`
+- **Shows**: All dispatches to clients
+- **Filters**: Date range, operator, client, tracking code
+
+## API Integration
+
+All operator interfaces use the same backend APIs:
+
+```bash
+# Get tote information
+GET /api/operador/tote/info?codigo=TOTE-1234
+
+# Update tote status
+PUT /api/operador/totes/update-status
+
+# Move tote
+PUT /api/totes/mover
+
+# Get movement history
+GET /api/movimientos?operador=Juan&modulo=llenado
+```
+
+## Performance Optimizations
+
+### Caching
+
+- Product list cached for 5 minutes
+- Client list cached for 5 minutes
+- Location list cached for 5 minutes
+- Reduces database queries during high-volume operations
+
+### Batch Operations
+
+For high-volume workflows:
+
+```javascript
+// Process multiple totes in sequence
+const toteQueue = [];
+
+// Auto-advance to next tote after save
+function processNextInQueue() {
+  // Immediate feedback, saves in background
+}
+```
+
+### Offline Capability
+
+Planned feature for v2.0:
+
+- Local storage for pending operations
+- Auto-sync when connection restored
+- Conflict resolution for concurrent edits
+
+## Mobile Responsiveness
+
+All interfaces are optimized for tablets and phones:
+
+```css
+/* Touch-friendly buttons */
+.btn-operator {
+  min-height: 44px;
+  min-width: 44px;
+  font-size: 16px;
+  padding: 12px 24px;
+}
+
+/* Large input fields */
+.input-operator {
+  height: 48px;
+  font-size: 18px;
+}
+
+/* Responsive layout */
+@media (max-width: 768px) {
+  .operator-form {
+    flex-direction: column;
+  }
+}
+```
+
+## Security Features
+
+### Role-Based Access
+
+- Each interface checks user role on page load
+- Unauthorized users redirected to login
+- Session timeout after 8 hours of inactivity
+
+### Input Validation
+
+- Client-side validation for immediate feedback
+- Server-side validation for security
+- Barcode/RFID format checking
+- Weight range validation (0.1 - 10,000 kg)
+
+### Audit Trail
+
+Every operation logged:
+
+```javascript
+{
+  "TipEvento": "Actualizacion",
+  "Modulo": "LLENADO" | "TOTES" | "DESPACHO",
+  "Descripcion": "Detailed description of operation",
+  "Usuario": "Operator Name",
+  "IpAddress": "192.168.1.100",
+  "UserAgent": "Mobile Safari..."
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Scanner not working">
+    Check that scanner is configured for USB HID mode. Scanner should send data followed by Enter key. Test in a text editor first.
+  </Accordion>
+  
+  <Accordion title="Tote not found">
+    Verify tote code is correct. Check that tote exists in database with `Activo = 1`. Look for typos in code entry.
+  </Accordion>
+  
+  <Accordion title="Invalid state transition">
+    Review tote lifecycle rules. Some transitions require intermediate states. Check current tote status in admin interface.
+  </Accordion>
+  
+  <Accordion title="Slow performance">
+    Clear browser cache. Check network connection. Verify database connection pool is not exhausted (check logs).
+  </Accordion>
+</AccordionGroup>
+
+## Related Documentation
+
+<CardGroup cols={3}>
+  <Card title="Filling Operator Guide" icon="fill-drip" href="/operators/filling-operator">
+    Detailed filling workflow
+  </Card>
+  <Card title="Tote Operator Guide" icon="dolly" href="/operators/tote-operator">
+    Movement workflow guide
+  </Card>
+  <Card title="Dispatch Operator Guide" icon="truck" href="/operators/dispatch-operator">
+    Dispatch workflow guide
+  </Card>
+  <Card title="Roles & Permissions" icon="lock" href="/concepts/roles-and-permissions">
+    Understanding operator roles
+  </Card>
+  <Card title="Tote Lifecycle" icon="rotate" href="/concepts/tote-lifecycle">
+    Complete lifecycle documentation
+  </Card>
+  <Card title="API: Totes" icon="code" href="/api/totes">
+    Operator API reference
+  </Card>
+</CardGroup>

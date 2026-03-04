@@ -1,0 +1,259 @@
+---
+title: Dashboard
+description: Real-time KPIs, metrics, and operational insights for DitzlerTotes management
+---
+
+The DitzlerTotes dashboard provides administrators and supervisors with real-time visibility into operations, inventory status, and system health.
+
+## Overview
+
+The dashboard is the central command center for monitoring your tote management operations. It displays key performance indicators (KPIs), recent activity, and alerts that require attention.
+
+<CardGroup cols={2}>
+  <Card title="Real-Time Metrics" icon="chart-line">
+    Live updates of tote counts, statuses, and operational KPIs
+  </Card>
+  <Card title="Activity Feed" icon="clock">
+    Recent events and operations across the system
+  </Card>
+  <Card title="Alert Management" icon="bell">
+    Expiration warnings and critical system notifications
+  </Card>
+  <Card title="Productivity Charts" icon="chart-bar">
+    7-day trends for operations and performance
+  </Card>
+</CardGroup>
+
+## Key Metrics
+
+### Tote Statistics
+
+The dashboard displays comprehensive tote inventory statistics:
+
+```javascript
+// GET /api/dashboard/stats
+{
+  "success": true,
+  "data": {
+    "totalTotes": 1250,
+    "totesDisponibles": 450,
+    "totesEnUso": 650,
+    "totesMantenimiento": 100,
+    "totesFueraPlazo": 50,
+    "totesProximosVencer": 75,
+    "totalClientes": 42,
+    "clientesActivos": 38,
+    "totesEnTransito": 125,
+    "tiempoRotacionPromedio": 14.5
+  }
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Total Totes">
+    Total number of totes in the system (active and inactive)
+  </Accordion>
+  <Accordion title="Available Totes">
+    Totes ready for use, not assigned to any operation
+  </Accordion>
+  <Accordion title="In Use">
+    Totes currently assigned to clients or in operations
+  </Accordion>
+  <Accordion title="Under Maintenance">
+    Totes undergoing cleaning, repair, or inspection
+  </Accordion>
+  <Accordion title="Past Due">
+    Totes that have exceeded their expiration date
+  </Accordion>
+  <Accordion title="Expiring Soon">
+    Totes approaching expiration within the next 7 days
+  </Accordion>
+</AccordionGroup>
+
+### Client Metrics
+
+- **Total Clients**: All registered clients in the system
+- **Active Clients**: Clients with active status
+- **Totes in Transit**: Totes dispatched to clients
+- **Average Rotation Time**: Average days a tote spends in circulation
+
+## Activity Feed
+
+The dashboard displays recent events from across the system:
+
+```javascript
+// GET /api/dashboard/activity
+{
+  "success": true,
+  "events": [
+    {
+      "Id": 15234,
+      "TipEvento": "Actualizacion",
+      "Descripcion": "Tote TOTE-1234 moved to Warehouse-A",
+      "Usuario": "Juan Perez",
+      "FechaEvento": "2024-01-15T10:30:00",
+      "Severidad": "Info",
+      "Modulo": "TOTES"
+    }
+  ]
+}
+```
+
+### Event Types Tracked
+
+- **Creacion**: New records created (totes, users, clients)
+- **Actualizacion**: Status changes, movements, updates
+- **Eliminacion**: Deletion of records
+- **Login/Logout**: User authentication events
+- **Error**: System errors and exceptions
+- **Alerta**: Critical warnings and notifications
+
+## Productivity Metrics
+
+Track operational performance over time with 7-day trend charts:
+
+```javascript
+// GET /api/dashboard/productivity
+{
+  "success": true,
+  "data": {
+    "labels": ["2024-01-08", "2024-01-09", "2024-01-10", "2024-01-11", "2024-01-12", "2024-01-13", "2024-01-14"],
+    "fillings": [45, 52, 38, 61, 55, 48, 50],
+    "movements": [120, 135, 115, 142, 138, 125, 130],
+    "dispatches": [28, 32, 25, 35, 30, 28, 31]
+  }
+}
+```
+
+### Chart Categories
+
+<Steps>
+  <Step title="Fillings">
+    Number of totes filled per day by filling operators
+  </Step>
+  <Step title="Movements">
+    Total tote movements between locations
+  </Step>
+  <Step title="Dispatches">
+    Totes sent to clients per day
+  </Step>
+</Steps>
+
+## Alerts and Notifications
+
+The dashboard displays active alerts that require attention:
+
+```javascript
+// GET /api/alertas
+{
+  "success": true,
+  "alertas": [
+    {
+      "tipo": "vencimiento",
+      "severidad": "alta",
+      "mensaje": "15 totes expiring within 24 hours",
+      "count": 15
+    },
+    {
+      "tipo": "mantenimiento",
+      "severidad": "media",
+      "mensaje": "8 totes pending maintenance over 7 days",
+      "count": 8
+    }
+  ]
+}
+```
+
+### Alert Severity Levels
+
+| Severity | Description | Color |
+|----------|-------------|-------|
+| **Baja** | Informational notices | Blue |
+| **Media** | Warnings requiring attention | Yellow |
+| **Alta** | Important issues | Orange |
+| **Crítica** | Urgent problems requiring immediate action | Red |
+
+## Access Control
+
+Dashboard access is role-based:
+
+- **Administrador**: Full access to all metrics and features
+- **Supervisor**: Read-only access to all metrics
+- **Visor**: Limited access to basic statistics
+
+<Warning>
+Operator roles (Filling, Tote, Dispatch) do not have dashboard access. They use specialized operator interfaces.
+</Warning>
+
+## Dashboard UI Components
+
+The dashboard (`pages/dashboard.html`) features:
+
+### Statistics Cards
+
+- Large number displays with icons
+- Color-coded status indicators
+- Percentage changes from previous period
+
+### Charts
+
+- Line charts for productivity trends
+- Pie charts for tote distribution by status
+- Bar charts for client activity
+
+### Quick Actions
+
+- Create new tote
+- Register new client
+- View all alerts
+- Export reports
+
+### Recent Activity Table
+
+- Last 20 events across the system
+- Filterable by module and event type
+- Click to view event details
+
+## Customization
+
+Administrators can customize dashboard views:
+
+```javascript
+// Update user preferences
+PUT /api/user/preferences
+{
+  "dashboardLayout": "compact",
+  "defaultChartPeriod": 7,
+  "hideZeroMetrics": true
+}
+```
+
+## Performance
+
+The dashboard uses several optimizations:
+
+- **Stored Procedures**: `SP_EstadisticasDashboard` for fast stats
+- **Caching**: 30-second cache on metrics
+- **Lazy Loading**: Charts load on-demand
+- **Auto-refresh**: Metrics update every 60 seconds
+
+<Tip>
+For large deployments (10,000+ totes), consider increasing the cache duration to reduce database load.
+</Tip>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="API: Dashboard" icon="code" href="/api/dashboard">
+    Dashboard API endpoints reference
+  </Card>
+  <Card title="API: Events" icon="list" href="/api/events">
+    Event and audit log APIs
+  </Card>
+  <Card title="User Management" icon="users" href="/features/user-management">
+    Managing dashboard access and permissions
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/operations/monitoring">
+    System monitoring and health checks
+  </Card>
+</CardGroup>

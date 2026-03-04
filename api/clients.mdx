@@ -1,0 +1,522 @@
+---
+title: "Clients API"
+description: "Endpoints for client management and retrieval"
+---
+
+## Get Active Clients
+
+Retrieve all active clients (available to all authenticated users).
+
+<CodeGroup>
+```bash GET /api/clientes
+curl -X GET https://api.ditzlertotes.com/api/clientes \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+</CodeGroup>
+
+### Headers
+
+<ParamField header="Authorization" type="string">
+  Bearer token obtained from login (optional for this endpoint)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="clientes" type="array">
+  Array of active client objects
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Total number of active clients
+</ResponseField>
+
+<ResponseField name="clientes[].Id" type="number">
+  Client's unique identifier
+</ResponseField>
+
+<ResponseField name="clientes[].Nombre" type="string">
+  Company name
+</ResponseField>
+
+<ResponseField name="clientes[].Contacto" type="string">
+  Primary contact name
+</ResponseField>
+
+<ResponseField name="clientes[].Email" type="string">
+  Client's email address
+</ResponseField>
+
+<ResponseField name="clientes[].Telefono" type="string">
+  Client's phone number
+</ResponseField>
+
+<ResponseField name="clientes[].Tipo" type="string">
+  Client type/category
+</ResponseField>
+
+### Response Example
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "clientes": [
+    {
+      "Id": 1,
+      "Nombre": "Empresa ABC S.A.",
+      "Contacto": "Juan Pérez",
+      "Email": "contacto@empresaabc.com",
+      "Telefono": "+56912345678",
+      "Tipo": "Distribuidor"
+    },
+    {
+      "Id": 2,
+      "Nombre": "Industrias XYZ Ltda.",
+      "Contacto": "María González",
+      "Email": "info@industriasxyz.com",
+      "Telefono": "+56987654321",
+      "Tipo": "Fabricante"
+    }
+  ],
+  "total": 2
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Error interno del servidor al obtener clientes",
+  "error": "Connection timeout"
+}
+```
+</CodeGroup>
+
+---
+
+## Client Management (Admin)
+
+Unified endpoint for all client management operations. Requires admin authentication.
+
+<CodeGroup>
+```bash POST /api/admin/clientes
+curl -X POST https://api.ditzlertotes.com/api/admin/clientes \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "list"
+  }'
+```
+</CodeGroup>
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token obtained from login (must be an admin user)
+</ParamField>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Action to perform: `list`, `create`, `update`, or `delete`
+</ParamField>
+
+<ParamField body="clientData" type="object">
+  Client data object (required for create, update, and delete actions)
+</ParamField>
+
+---
+
+## List All Clients
+
+Retrieve all clients (including inactive ones).
+
+<CodeGroup>
+```bash POST /api/admin/clientes
+curl -X POST https://api.ditzlertotes.com/api/admin/clientes \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "list"
+  }'
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Must be `"list"`
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="clientes" type="array">
+  Array of all client objects
+</ResponseField>
+
+<ResponseField name="clientes[].Id" type="number">
+  Client's unique identifier
+</ResponseField>
+
+<ResponseField name="clientes[].logo" type="string">
+  URL or path to client's logo
+</ResponseField>
+
+<ResponseField name="clientes[].nombre_empresa" type="string">
+  Company name
+</ResponseField>
+
+<ResponseField name="clientes[].contacto_principal" type="string">
+  Primary contact name
+</ResponseField>
+
+<ResponseField name="clientes[].email" type="string">
+  Client's email address
+</ResponseField>
+
+<ResponseField name="clientes[].telefono" type="string">
+  Client's phone number
+</ResponseField>
+
+<ResponseField name="clientes[].tipo" type="string">
+  Client type/category
+</ResponseField>
+
+<ResponseField name="clientes[].estado" type="string">
+  Client status ("Activo" or "Inactivo")
+</ResponseField>
+
+<ResponseField name="clientes[].UbicacionDefecto" type="string">
+  Default location for the client
+</ResponseField>
+
+### Response Example
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "clientes": [
+    {
+      "Id": 1,
+      "id": 1,
+      "logo": "https://example.com/logos/empresaabc.png",
+      "nombre_empresa": "Empresa ABC S.A.",
+      "nombreEmpresa": "Empresa ABC S.A.",
+      "contacto_principal": "Juan Pérez",
+      "contactoPrincipal": "Juan Pérez",
+      "email": "contacto@empresaabc.com",
+      "telefono": "+56912345678",
+      "tipo": "Distribuidor",
+      "estado": "Activo",
+      "UbicacionDefecto": "Bodega Central",
+      "ubicacionDefecto": "Bodega Central"
+    }
+  ]
+}
+```
+</CodeGroup>
+
+---
+
+## Create Client
+
+Create a new client in the system.
+
+<CodeGroup>
+```bash POST /api/admin/clientes
+curl -X POST https://api.ditzlertotes.com/api/admin/clientes \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "create",
+    "clientData": {
+      "logo": "https://example.com/logo.png",
+      "nombre_empresa": "Nueva Empresa S.A.",
+      "contacto_principal": "Carlos Ruiz",
+      "email": "contacto@nuevaempresa.com",
+      "telefono": "+56911223344",
+      "tipo": "Distribuidor",
+      "estado": "Activo"
+    }
+  }'
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Must be `"create"`
+</ParamField>
+
+<ParamField body="clientData" type="object" required>
+  Client data object
+</ParamField>
+
+<ParamField body="clientData.nombre_empresa" type="string" required>
+  Company name
+</ParamField>
+
+<ParamField body="clientData.contacto_principal" type="string" required>
+  Primary contact person
+</ParamField>
+
+<ParamField body="clientData.email" type="string" required>
+  Client's email address (must be unique and valid format)
+</ParamField>
+
+<ParamField body="clientData.telefono" type="string" required>
+  Client's phone number
+</ParamField>
+
+<ParamField body="clientData.tipo" type="string" required>
+  Client type/category
+</ParamField>
+
+<ParamField body="clientData.estado" type="string" required>
+  Client status ("Activo" or "Inactivo")
+</ParamField>
+
+<ParamField body="clientData.logo" type="string">
+  URL or path to client's logo (optional)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the client was created successfully
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+### Response Examples
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "message": "Cliente creado correctamente"
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Ya existe un cliente con ese email"
+}
+```
+</CodeGroup>
+
+---
+
+## Update Client
+
+Update an existing client's information.
+
+<CodeGroup>
+```bash POST /api/admin/clientes
+curl -X POST https://api.ditzlertotes.com/api/admin/clientes \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "update",
+    "clientData": {
+      "id": 1,
+      "logo": "https://example.com/newlogo.png",
+      "nombre_empresa": "Empresa ABC S.A. (Actualizada)",
+      "contacto_principal": "Juan Pérez Silva",
+      "email": "nuevo@empresaabc.com",
+      "telefono": "+56999887766",
+      "tipo": "Distribuidor Premium",
+      "estado": "Activo"
+    }
+  }'
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Must be `"update"`
+</ParamField>
+
+<ParamField body="clientData" type="object" required>
+  Client data object
+</ParamField>
+
+<ParamField body="clientData.id" type="number" required>
+  Client's unique identifier
+</ParamField>
+
+<ParamField body="clientData.nombre_empresa" type="string" required>
+  Company name
+</ParamField>
+
+<ParamField body="clientData.contacto_principal" type="string" required>
+  Primary contact person
+</ParamField>
+
+<ParamField body="clientData.email" type="string" required>
+  Client's email address
+</ParamField>
+
+<ParamField body="clientData.telefono" type="string" required>
+  Client's phone number
+</ParamField>
+
+<ParamField body="clientData.tipo" type="string" required>
+  Client type/category
+</ParamField>
+
+<ParamField body="clientData.estado" type="string" required>
+  Client status ("Activo" or "Inactivo")
+</ParamField>
+
+<ParamField body="clientData.logo" type="string">
+  URL or path to client's logo
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the client was updated successfully
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+### Response Examples
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "message": "Cliente actualizado correctamente"
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Cliente no encontrado"
+}
+```
+</CodeGroup>
+
+---
+
+## Delete Client
+
+Delete a client from the system.
+
+<CodeGroup>
+```bash POST /api/admin/clientes
+curl -X POST https://api.ditzlertotes.com/api/admin/clientes \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "delete",
+    "clientData": {
+      "id": 5
+    }
+  }'
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Must be `"delete"`
+</ParamField>
+
+<ParamField body="clientData" type="object" required>
+  Client data object
+</ParamField>
+
+<ParamField body="clientData.id" type="number" required>
+  ID of the client to delete
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the client was deleted successfully
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+### Response Examples
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "message": "Cliente eliminado correctamente"
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Cliente no encontrado"
+}
+```
+</CodeGroup>
+
+---
+
+## Important Notes
+
+### Email Validation
+
+- Email addresses must be in valid format
+- Email addresses must be unique across all clients
+- Empty emails are allowed during creation
+- Changing a client's email is validated against existing clients
+
+### Field Naming Convention
+
+The API uses snake_case for database fields but also provides camelCase aliases for frontend compatibility:
+
+- `nombre_empresa` / `nombreEmpresa`
+- `contacto_principal` / `contactoPrincipal`
+- `UbicacionDefecto` / `ubicacionDefecto`
+
+### Audit Logging
+
+All client management operations (create, update, delete) are automatically logged to the audit system with:
+
+- Current user information
+- Action performed (CLIENTES module)
+- Old and new values (for updates)
+- Timestamp and IP address
+
+### Error Handling
+
+Common error messages:
+
+- `"No autorizado"` - Missing or invalid authentication token
+- `"Datos de cliente requeridos"` - Missing clientData in request
+- `"ID de cliente requerido"` - Missing client ID for update/delete
+- `"Acción no válida"` - Invalid action parameter
+- `"El formato del email no es válido"` - Email format validation failed
+- `"Ya existe un cliente con ese email"` - Duplicate email constraint violation
+- `"Cliente no encontrado"` - Client ID does not exist
+- `"Los datos no cumplen con las validaciones requeridas"` - Database constraint violation
+
+### Access Control
+
+- `GET /api/clientes` - Available to all authenticated users, returns only active clients
+- `POST /api/admin/clientes` - Requires admin authentication, provides full CRUD operations

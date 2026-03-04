@@ -1,0 +1,331 @@
+---
+title: Filling Operator Workflow
+description: Complete guide for tote filling operations including RFID identification, product selection, weighing, and barcode generation
+---
+
+# Filling Operator Workflow
+
+The Filling Operator module handles the complete workflow for filling totes with products, including RFID identification, weighing, and tracking code generation.
+
+## Overview
+
+The filling process follows a structured 4-step workflow:
+
+1. **Identification** - RFID tag scanning and batch number assignment
+2. **Product and Client Selection** - Product selection with automatic client assignment
+3. **Weighing** - Gross weight capture and net weight calculation
+4. **Summary and Save** - Review and print with barcode generation
+
+## Step-by-Step Process
+
+<Steps>
+
+### Step 1: Identification (RFID)
+
+The first step is to identify the tote using its RFID tag.
+
+**Input Requirements:**
+- **RFID Tag**: Enter or scan the tote's RFID code
+- **Batch Number (Lote)**: Automatically loaded from the last recorded batch
+- **Date**: Automatically populated with current date
+
+**Batch Number Management:**
+- The system loads the last used batch number automatically
+- Use **"Next Batch" button** to generate the next sequential batch (format: `LOTE-XXXXXX`)
+- Use **"Manual Batch" button** to enter a custom batch number
+- Batch numbers are tracked across both `Totes` and `Llenados_Totes` tables to prevent duplicates
+
+**RFID Validation:**
+```javascript
+// The system validates the RFID tag exists in the database
+const response = await fetch(`/api/operador/tote/info?codigo=${tag}`);
+// If not found, shows error: "El tote con código ${tag} no existe en el sistema"
+```
+
+**Field Specifications:**
+- RFID input is automatically converted to uppercase
+- Press Enter or blur to trigger validation
+- System checks tote existence before proceeding
+
+### Step 2: Product and Client Selection
+
+Select the product to be filled and the destination client will be automatically assigned.
+
+**Product Selection:**
+- Dropdown populated with active products from the database
+- Format: `{ProductCode} - {ProductName}`
+- Only products with `Estado = 'Activo'` are shown
+
+**Automatic Client Assignment:**
+The system automatically assigns the client based on product configuration:
+
+1. **Single Client Product**: If the product has only one client in its `Clientes` field, that client is auto-selected
+2. **Multiple Client Product**: If multiple clients exist, the system selects:
+   - The tote's current client (if it matches one of the product's clients)
+   - Otherwise, the first client in the list
+3. **No Client Configured**: Shows "Sin Asignar"
+
+**Target Location Logic:**
+```javascript
+// System determines target location based on client
+const clientObj = clientsCache.find(c => c.nombre_empresa === clientName);
+state.targetLocation = clientObj ? (clientObj.UbicacionDefecto || 'Llenado') : 'Llenado';
+```
+
+### Step 3: Weighing
+
+Capture the gross weight and calculate net weight.
+
+**Weighing Process:**
+
+1. **Select Scale**: Choose between Balanza 1 or Balanza 2
+2. **Set Tare Weight**: Default is 40 kg (adjustable)
+3. **Capture Weight**: Click "Capturar Peso" to read from the scale
+
+**Weight Calculation:**
+```javascript
+// Net weight = Gross weight - Tare
+state.weightNeto = (state.weightBruto - state.tara).toFixed(2);
+```
+
+**Scale Integration:**
+- In production, the system connects to physical scales
+- Weight is captured in real-time from the selected scale
+- The current implementation includes a simulation for testing
+
+**Validation:**
+- Gross weight must be greater than 0 to proceed
+- Net weight is automatically calculated and displayed
+
+### Step 4: Summary and Save
+
+Review all information and save the filling record.
+
+**Summary Display:**
+The right panel shows:
+- **TAG RFID**: Confirmed RFID code
+- **Producto**: Selected product name
+- **Cliente**: Assigned client
+- **Lote**: Current batch number
+- **Peso Bruto**: Gross weight in kg
+- **Peso Neto**: Net weight in kg (highlighted in green)
+- **Tracking Code**: Auto-generated barcode for tracking
+
+**Barcode Generation:**
+The system automatically generates a tracking code when all required fields are complete:
+
+```javascript
+// Barcode is generated using the database function
+const bcRes = await fetch('/api/operador/barcode/generate');
+// Returns format: COD-XXXXXX or RETAIL-XXXXXX
+```
+
+The barcode is displayed as:
+- CODE128 format barcode image
+- Text representation below the barcode
+
+**Save Operation:**
+
+When clicking "IMPRIMIR Y GUARDAR" (Print & Save), the system performs two operations:
+
+1. **Save to Filling History** (`Llenados_Totes` table):
+   ```javascript
+   {
+     rfidTag: state.rfid,
+     pesoBruto: parseFloat(state.weightBruto),
+     pesoNeto: parseFloat(state.weightNeto),
+     tara: parseFloat(state.tara),
+     producto: state.product.Nombre,
+     lote: state.lote,
+     operador: userData.email,
+     balanza: parseInt(balanza),
+     copias: parseInt(copias),
+     codigoBarra: state.barcode
+   }
+   ```
+
+2. **Update Tote Status** (`Totes` table):
+   ```javascript
+   {
+     codigo: state.rfid,
+     nuevoEstado: 'Producto terminado',
+     nuevaUbicacion: state.targetLocation,
+     usuario: userData.fullname,
+     producto: state.product.Nombre,
+     cliente: state.client,
+     lote: state.lote,
+     peso: parseFloat(state.weightNeto),
+     codigoBarra: state.barcode
+   }
+   ```
+
+**After Save:**
+- System automatically generates the next batch number
+- Form resets for the next tote
+- Focus returns to RFID input field
+- Success message confirms the operation
+
+</Steps>
+
+## Database Operations
+
+### Filling History Service
+
+The filling operation uses the `fillings.service.js` which handles:
+
+**Create Operation:**
+```sql
+INSERT INTO Llenados_Totes 
+(RFID_Tag, Peso_Bruto, Peso_Neto, Tara, Producto, Lote, Usuario, Nombre_Operador, 
+ Balanza, Copias, Fecha_Registro, CodigoBarra)
+VALUES 
+(@rfid, @pesoBruto, @pesoNeto, @tara, @producto, @lote, @usuario, @nombreOperador, 
+ @balanza, @copias, @fechaRegistro, @codigoBarra)
+```
+
+**History Query:**
+- Supports filtering by user, date range, product, scale, and RFID
+- Returns ordered by `Fecha_Registro DESC`
+- Used for tracking and auditing filling operations
+
+### Tote Status Update
+
+The system updates the tote record with:
+- **Estado**: Set to "Producto terminado"
+- **Ubicacion**: Set to target location (client's default or "Llenado")
+- **Producto**: Product name
+- **Cliente**: Assigned client name
+- **Lote**: Batch number
+- **Peso**: Net weight
+- **CodigoBarra**: Generated tracking code
+- **FechaModificacion**: Current timestamp
+
+## Batch Number System
+
+### Last Batch Retrieval
+
+```javascript
+// Priority 1: Get from filling history (most accurate)
+SELECT TOP 1 Lote FROM Llenados_Totes 
+WHERE Lote IS NOT NULL AND Lote LIKE 'LOTE-%' 
+ORDER BY Id DESC
+
+// Priority 2: Fallback to active totes
+SELECT TOP 1 Lote FROM Totes 
+WHERE Lote IS NOT NULL AND Lote LIKE 'LOTE-%' 
+ORDER BY FechaModificacion DESC
+```
+
+### Next Batch Generation
+
+```javascript
+// Query highest batch number from both tables
+SELECT TOP 1 Lote 
+FROM (
+  SELECT Lote FROM Totes WHERE Lote LIKE 'LOTE-%'
+  UNION 
+  SELECT Lote FROM Llenados_Totes WHERE Lote LIKE 'LOTE-%'
+) AS Combined 
+ORDER BY Lote DESC
+
+// Increment and format as LOTE-XXXXXX (6 digits, zero-padded)
+```
+
+## User Interface Elements
+
+### Form Sections
+
+1. **Section 1 (Blue Border)**: Identification
+   - RFID input field
+   - Batch number display with controls
+   - Date display
+
+2. **Section 2 (Teal Border)**: Product and Client
+   - Product dropdown selector
+   - Read-only client field (auto-assigned)
+
+3. **Section 3 (Orange Border)**: Weighing
+   - Scale selector
+   - Tare input field
+   - "Capture Weight" button
+
+4. **Action Buttons**:
+   - **Borrar** (Clear): Resets all fields
+   - **IMPRIMIR Y GUARDAR** (Print & Save): Saves and prints (disabled until all fields are complete)
+
+### Summary Panel (Right Side)
+
+Displays real-time summary with:
+- All captured data
+- Calculated net weight (highlighted)
+- Generated barcode with tracking code
+
+### Mobile Responsive Design
+
+The interface adapts for mobile devices:
+- Stacked vertical layout
+- Touch-friendly buttons
+- Optimized input fields
+- Bottom navigation bar
+
+## Validation Rules
+
+<Note>
+**Required Fields for Save:**
+- RFID Tag (validated in system)
+- Product selected
+- Gross weight > 0
+- Batch number present
+</Note>
+
+<Warning>
+**Common Issues:**
+- **RFID not found**: Ensure the tote exists in the database
+- **No weight**: Click "Capturar Peso" to read from scale
+- **Missing product**: Select a product from the dropdown
+- **Save disabled**: All required fields must be completed
+</Warning>
+
+## Session and Security
+
+- **Session Validation**: Checked on page load using `session-guard.js`
+- **Auto-logout**: Inactive sessions are terminated after timeout
+- **User Tracking**: All operations logged with operator email and name
+- **Permission Check**: Only authorized operators can access this module
+
+## API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|----------|
+| `/api/operador/tote/info` | GET | Validate RFID and get tote info |
+| `/api/admin/productos` | POST | Load active products |
+| `/api/admin/clientes` | POST | Load client list |
+| `/api/operador/lote/last` | GET | Get last batch number |
+| `/api/operador/lote/next` | GET | Generate next batch number |
+| `/api/operador/barcode/generate` | GET | Generate tracking code |
+| `/api/operador/llenado` | POST | Save filling history |
+| `/api/operador/totes/update-status` | PUT | Update tote status |
+
+## Tips and Best Practices
+
+<Tip>
+**Workflow Efficiency:**
+- Keep the RFID scanner ready for quick tag reading
+- Use the "Next Batch" button at the start of each new batch
+- The system auto-focuses the RFID field after save for quick scanning
+- Review the summary panel before saving to catch any errors
+</Tip>
+
+<Tip>
+**Batch Management:**
+- Use sequential batch numbers for better tracking
+- Manual batch entry is available for special cases
+- Batch numbers are preserved in history even if totes are moved
+</Tip>
+
+## Related Documentation
+
+- [Tote Operator Workflow](/operators/tote-operator) - Managing tote movements after filling
+- [Dispatch Operator Workflow](/operators/dispatch-operator) - Moving filled totes to destinations
+- [Tracking System](/features/tracking) - Understanding tracking codes and barcodes
+- [Scale Integration](/integrations/scales) - Connecting physical scales to the system

@@ -1,0 +1,717 @@
+---
+title: 'Tote Management'
+description: 'API endpoints for managing totes including CRUD operations, movement tracking, and status updates'
+---
+
+## Get All Totes
+
+Retrieve a list of all active totes with optional filtering.
+
+```http
+GET /api/totes
+```
+
+### Query Parameters
+
+<ParamField query="codigo" type="string">
+  Filter totes by specific tote code
+</ParamField>
+
+<ParamField query="cliente" type="string">
+  Filter totes by assigned client name
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="totes" type="array" required>
+  Array of tote objects
+  
+  <ResponseField name="Id" type="integer">
+    Unique tote identifier
+  </ResponseField>
+  
+  <ResponseField name="Codigo" type="string">
+    Tote code/barcode
+  </ResponseField>
+  
+  <ResponseField name="Estado" type="string">
+    Current tote status (e.g., "TOTE VACIO", "Producto terminado", "EN MANTENCION", "REPROCESO", "CLIENTE")
+  </ResponseField>
+  
+  <ResponseField name="Ubicacion" type="string">
+    Current physical location
+  </ResponseField>
+  
+  <ResponseField name="Cliente" type="string">
+    Assigned client name
+  </ResponseField>
+  
+  <ResponseField name="Usuario" type="string">
+    Last user who modified the tote
+  </ResponseField>
+  
+  <ResponseField name="Producto" type="string">
+    Product contained in the tote
+  </ResponseField>
+  
+  <ResponseField name="Lote" type="string">
+    Batch/lot number
+  </ResponseField>
+  
+  <ResponseField name="fDespacho" type="string">
+    Dispatch date (formatted as dd/MM/yyyy)
+  </ResponseField>
+  
+  <ResponseField name="fRetorno" type="string">
+    Return date (formatted as dd/MM/yyyy)
+  </ResponseField>
+  
+  <ResponseField name="Peso" type="decimal">
+    Weight of contents in kilograms
+  </ResponseField>
+  
+  <ResponseField name="Alerta" type="string">
+    Alert or warning message
+  </ResponseField>
+  
+  <ResponseField name="Observaciones" type="string">
+    Additional observations or notes
+  </ResponseField>
+  
+  <ResponseField name="CodigoBarra" type="string">
+    Tracking barcode (generated for finished products)
+  </ResponseField>
+  
+  <ResponseField name="CodigoRetail" type="string">
+    Retail code (generated when tote moves to Retail location)
+  </ResponseField>
+  
+  <ResponseField name="FechaModificacion" type="datetime">
+    Last modification timestamp
+  </ResponseField>
+  
+  <ResponseField name="FechaCreacion" type="datetime">
+    Creation timestamp
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="total" type="integer" required>
+  Total number of totes returned
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/totes?cliente=Retail" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "totes": [
+    {
+      "Id": 1234,
+      "Codigo": "T-001",
+      "Estado": "Producto terminado",
+      "Ubicacion": "Retail",
+      "Cliente": "Retail",
+      "Usuario": "operador@example.com",
+      "Producto": "Helado Chocolate",
+      "Lote": "LOTE-000001",
+      "fDespacho": "15/01/2024",
+      "fRetorno": "14/02/2024",
+      "Peso": 25.5,
+      "Alerta": null,
+      "Observaciones": "Producto de alta calidad",
+      "CodigoBarra": "SEG-000001",
+      "CodigoRetail": "RET-000001",
+      "FechaModificacion": "2024-01-15T10:30:00",
+      "FechaCreacion": "2024-01-15T08:00:00"
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+## Get Tote Info
+
+Get information about a specific tote by its code.
+
+```http
+GET /api/operador/tote/info
+```
+
+### Query Parameters
+
+<ParamField query="codigo" type="string" required>
+  The tote code to look up
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the tote was found
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message if tote was not found
+</ResponseField>
+
+<ResponseField name="tote" type="object">
+  Tote information object
+  
+  <ResponseField name="Estado" type="string">
+    Current tote status
+  </ResponseField>
+  
+  <ResponseField name="Cliente" type="string">
+    Assigned client
+  </ResponseField>
+  
+  <ResponseField name="Lote" type="string">
+    Batch/lot number
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/operador/tote/info?codigo=T-001" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "tote": {
+    "Estado": "Producto terminado",
+    "Cliente": "Retail",
+    "Lote": "LOTE-000001"
+  }
+}
+```
+
+---
+
+## Move Tote
+
+Move a tote to a new location. This endpoint applies business rules based on the destination location.
+
+```http
+PUT /api/totes/mover
+```
+
+### Request Body
+
+<ParamField body="nuevaUbicacion" type="string" required>
+  The destination location name
+</ParamField>
+
+<ParamField body="toteId" type="integer">
+  The tote ID (either toteId or codigo is required)
+</ParamField>
+
+<ParamField body="codigo" type="string">
+  The tote code (either toteId or codigo is required)
+</ParamField>
+
+<ParamField body="operador" type="string">
+  Name of the operator performing the move
+</ParamField>
+
+<ParamField body="usuario" type="string">
+  User performing the action
+</ParamField>
+
+<ParamField body="cliente" type="string">
+  Client to assign (optional, will be determined by location)
+</ParamField>
+
+### Business Rules
+
+- **Retail location**: Automatically generates a CodigoRetail and assigns client as "Retail"
+- **Almacenamiento**: Clears client assignment
+- **Lavado/Mantencion**: Changes status to "EN MANTENCION" and clears client
+- **Cliente: [Name]**: Assigns external client and changes status to "CLIENTE"
+- **Internal clients** (Retail, Helados, Preparados, Trasvase): Assigns client matching location name
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the move was successful
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Confirmation message with move details
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Move operation details
+  
+  <ResponseField name="toteId" type="integer">
+    Tote identifier
+  </ResponseField>
+  
+  <ResponseField name="codigo" type="string">
+    Tote code
+  </ResponseField>
+  
+  <ResponseField name="ubicacionAnterior" type="string">
+    Previous location
+  </ResponseField>
+  
+  <ResponseField name="nuevaUbicacion" type="string">
+    New location
+  </ResponseField>
+  
+  <ResponseField name="codigoRetail" type="string">
+    Generated retail code (if moved to Retail)
+  </ResponseField>
+  
+  <ResponseField name="codigoBarra" type="string">
+    Tracking barcode
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="codigoRetail" type="string">
+  Generated retail code (top-level for convenience)
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X PUT "https://api.ditzlertotes.com/api/totes/mover" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "codigo": "T-001",
+    "nuevaUbicacion": "Retail",
+    "operador": "Juan Perez"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "message": "Tote T-001 movido a Retail - Código Retail: RET-000042",
+  "data": {
+    "toteId": 1234,
+    "codigo": "T-001",
+    "ubicacionAnterior": "Almacenamiento",
+    "nuevaUbicacion": "Retail",
+    "codigoRetail": "RET-000042",
+    "codigoBarra": "SEG-000001"
+  },
+  "codigoRetail": "RET-000042"
+}
+```
+
+---
+
+## Update Tote Status
+
+Update the status and/or location of a tote. This is the primary endpoint used by operators for filling, moving, and managing totes.
+
+```http
+PUT /api/operador/totes/update-status
+```
+
+### Request Body
+
+<ParamField body="codigo" type="string" required>
+  Tote code to update
+</ParamField>
+
+<ParamField body="nuevoEstado" type="string">
+  New status (e.g., "Producto terminado", "TOTE VACIO", "REPROCESO")
+</ParamField>
+
+<ParamField body="nuevaUbicacion" type="string">
+  New location
+</ParamField>
+
+<ParamField body="usuario" type="string">
+  User performing the update
+</ParamField>
+
+<ParamField body="observaciones" type="string">
+  Additional observations
+</ParamField>
+
+<ParamField body="producto" type="string">
+  Product being filled into the tote
+</ParamField>
+
+<ParamField body="cliente" type="string">
+  Client assignment
+</ParamField>
+
+<ParamField body="lote" type="string">
+  Batch/lot number
+</ParamField>
+
+<ParamField body="peso" type="decimal">
+  Weight in kilograms
+</ParamField>
+
+<ParamField body="fechaEnvasado" type="datetime">
+  Packaging date
+</ParamField>
+
+<ParamField body="fechaVencimiento" type="datetime">
+  Expiration date
+</ParamField>
+
+<ParamField body="fechaRetorno" type="datetime">
+  Expected return date
+</ParamField>
+
+<ParamField body="codigoBarra" type="string">
+  Tracking barcode (auto-generated if not provided for finished products)
+</ParamField>
+
+### Business Rules
+
+- When `nuevoEstado` is "Producto terminado" and no `codigoBarra` provided, a tracking code is automatically generated
+- **Lavado/Limpieza/Mantencion**: Status changes to "EN MANTENCION", content fields are cleared
+- **Reproceso**: Status changes to "REPROCESO"
+- **Desecho**: Status changes to "TOTE VACIO", all content fields are cleared
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the update was successful
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Confirmation message
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Update operation details
+  
+  <ResponseField name="codigo" type="string">
+    Tote code
+  </ResponseField>
+  
+  <ResponseField name="estadoAnterior" type="string">
+    Previous status
+  </ResponseField>
+  
+  <ResponseField name="nuevoEstado" type="string">
+    New status
+  </ResponseField>
+  
+  <ResponseField name="ubicacionAnterior" type="string">
+    Previous location
+  </ResponseField>
+  
+  <ResponseField name="nuevaUbicacion" type="string">
+    New location
+  </ResponseField>
+  
+  <ResponseField name="codigoSeguimiento" type="string">
+    Generated tracking code (if applicable)
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X PUT "https://api.ditzlertotes.com/api/operador/totes/update-status" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "codigo": "T-001",
+    "nuevoEstado": "Producto terminado",
+    "producto": "Helado Vainilla",
+    "cliente": "Retail",
+    "lote": "LOTE-000025",
+    "peso": 28.5,
+    "usuario": "operador@example.com"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "message": "Tote T-001 actualizado correctamente",
+  "data": {
+    "codigo": "T-001",
+    "estadoAnterior": "TOTE VACIO",
+    "nuevoEstado": "Producto terminado",
+    "ubicacionAnterior": "Almacenamiento",
+    "nuevaUbicacion": "Almacenamiento",
+    "codigoSeguimiento": "SEG-000125"
+  }
+}
+```
+
+---
+
+## Admin Actions
+
+Administrative CRUD operations for tote management. Requires admin authentication.
+
+```http
+POST /api/admin/totes
+```
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Action to perform: "create", "list", "update", "delete", or "search"
+</ParamField>
+
+<ParamField body="toteData" type="object">
+  Tote data object (required for create, update, delete, search actions)
+</ParamField>
+
+### Create Tote
+
+**Action:** `"create"`
+
+**ToteData Fields:**
+
+<ParamField body="toteData.codigo" type="string" required>
+  Unique tote code
+</ParamField>
+
+<ParamField body="toteData.estado" type="string" required>
+  Initial status
+</ParamField>
+
+<ParamField body="toteData.ubicacion" type="string">
+  Initial location
+</ParamField>
+
+<ParamField body="toteData.cliente" type="string">
+  Assigned client
+</ParamField>
+
+<ParamField body="toteData.usuario" type="string">
+  User responsible
+</ParamField>
+
+<ParamField body="toteData.producto" type="string">
+  Product name
+</ParamField>
+
+<ParamField body="toteData.lote" type="string">
+  Batch/lot number
+</ParamField>
+
+<ParamField body="toteData.fechaDespacho" type="date">
+  Dispatch date (ISO format)
+</ParamField>
+
+<ParamField body="toteData.peso" type="decimal">
+  Weight in kilograms
+</ParamField>
+
+<ParamField body="toteData.alerta" type="string">
+  Alert message
+</ParamField>
+
+<ParamField body="toteData.observaciones" type="string">
+  Additional notes
+</ParamField>
+
+<ParamField body="toteData.usuarioCreacion" type="string">
+  Creator username (defaults to "admin")
+</ParamField>
+
+### Update Tote
+
+**Action:** `"update"`
+
+**ToteData Fields:** Same as create, plus:
+
+<ParamField body="toteData.id" type="integer" required>
+  Tote ID to update
+</ParamField>
+
+### Delete Tote
+
+**Action:** `"delete"`
+
+**ToteData Fields:**
+
+<ParamField body="toteData.id" type="integer" required>
+  Tote ID to delete (performs soft delete)
+</ParamField>
+
+### Search Totes
+
+**Action:** `"search"`
+
+**ToteData Fields:**
+
+<ParamField body="toteData.codigo" type="string">
+  Search by tote code
+</ParamField>
+
+<ParamField body="toteData.estado" type="string">
+  Filter by status
+</ParamField>
+
+<ParamField body="toteData.cliente" type="string">
+  Filter by client
+</ParamField>
+
+<ParamField body="toteData.fechaDesde" type="date">
+  Start date for date range
+</ParamField>
+
+<ParamField body="toteData.fechaHasta" type="date">
+  End date for date range
+</ParamField>
+
+### Example Request (Create)
+
+```bash
+curl -X POST "https://api.ditzlertotes.com/api/admin/totes" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "create",
+    "toteData": {
+      "codigo": "T-NEW-001",
+      "estado": "TOTE VACIO",
+      "ubicacion": "Almacenamiento",
+      "usuarioCreacion": "admin@example.com"
+    }
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "message": "Tote creado correctamente"
+}
+```
+
+---
+
+## Get Last Batch
+
+Get the most recent batch/lot number from the system.
+
+```http
+GET /api/operador/lote/last
+```
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="lote" type="string">
+  The last batch number (format: LOTE-XXXXXX) or null if none exists
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/operador/lote/last" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "lote": "LOTE-000042"
+}
+```
+
+---
+
+## Get Next Batch
+
+Generate the next sequential batch/lot number.
+
+```http
+GET /api/operador/lote/next
+```
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="lote" type="string" required>
+  The next batch number (format: LOTE-XXXXXX)
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/operador/lote/next" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "lote": "LOTE-000043"
+}
+```
+
+---
+
+## Generate Barcode
+
+Generate a new tracking barcode for a tote.
+
+```http
+GET /api/operador/barcode/generate
+```
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the barcode was generated successfully
+</ResponseField>
+
+<ResponseField name="barcode" type="string" required>
+  The generated barcode/tracking code (format: SEG-XXXXXX)
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/operador/barcode/generate" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "barcode": "SEG-000125"
+}
+```

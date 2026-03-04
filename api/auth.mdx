@@ -1,0 +1,300 @@
+---
+title: "Authentication API"
+description: "Endpoints for user authentication and preferences management"
+---
+
+## Login
+
+Authenticate a user and receive a JWT token.
+
+<CodeGroup>
+```bash POST /api/auth/login
+curl -X POST https://api.ditzlertotes.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "yourpassword"
+  }'
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="email" type="string" required>
+  User's email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the login was successful
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  JWT authentication token for subsequent requests
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  User's first name
+</ResponseField>
+
+<ResponseField name="fullname" type="string">
+  User's full name (first name + last name)
+</ResponseField>
+
+<ResponseField name="isAdmin" type="boolean">
+  Whether the user has admin privileges
+</ResponseField>
+
+<ResponseField name="role" type="string">
+  User's role (e.g., "Admin", "Operador")
+</ResponseField>
+
+<ResponseField name="userId" type="number">
+  User's unique identifier
+</ResponseField>
+
+<ResponseField name="preferences" type="object">
+  User's saved preferences object
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message if login failed
+</ResponseField>
+
+### Response Examples
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "username": "Juan",
+  "isAdmin": true,
+  "fullname": "Juan Pérez",
+  "role": "Admin",
+  "userId": 1,
+  "preferences": {
+    "theme": "dark",
+    "excludedFunctions": []
+  }
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Credenciales inválidas o el usuario está inactivo."
+}
+```
+</CodeGroup>
+
+---
+
+## Get User Preferences
+
+Retrieve the current user's preferences.
+
+<CodeGroup>
+```bash GET /api/auth/user/preferences
+curl -X GET https://api.ditzlertotes.com/api/auth/user/preferences \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+</CodeGroup>
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token obtained from login. Supports both JWT tokens and legacy email-based authentication.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="preferences" type="object">
+  User's preferences object containing custom settings
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message if request failed
+</ResponseField>
+
+### Response Examples
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "preferences": {
+    "theme": "dark",
+    "language": "es",
+    "excludedFunctions": [],
+    "notifications": true
+  }
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Usuario no encontrado"
+}
+```
+</CodeGroup>
+
+---
+
+## Update User Preferences
+
+Update the current user's preferences.
+
+<CodeGroup>
+```bash PUT /api/auth/user/preferences
+curl -X PUT https://api.ditzlertotes.com/api/auth/user/preferences \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "preferences": {
+      "theme": "dark",
+      "language": "es",
+      "notifications": true
+    }
+  }'
+```
+</CodeGroup>
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token obtained from login
+</ParamField>
+
+### Request Body
+
+<ParamField body="preferences" type="object" required>
+  Object containing user preferences. The new preferences will be merged with existing ones.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the update was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+<ResponseField name="preferences" type="object">
+  Updated preferences object (merged with existing preferences)
+</ResponseField>
+
+### Response Examples
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "message": "Preferencias guardadas",
+  "preferences": {
+    "theme": "dark",
+    "language": "es",
+    "notifications": true,
+    "excludedFunctions": []
+  }
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Preferencias inválidas"
+}
+```
+</CodeGroup>
+
+---
+
+## Update User Preferences (Admin)
+
+Update preferences for any user. Requires admin privileges.
+
+<CodeGroup>
+```bash PUT /api/auth/admin/user-preferences
+curl -X PUT https://api.ditzlertotes.com/api/auth/admin/user-preferences \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 5,
+    "preferences": {
+      "excludedFunctions": ["reportes"],
+      "theme": "light"
+    }
+  }'
+```
+</CodeGroup>
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token obtained from login (admin user)
+</ParamField>
+
+### Request Body
+
+<ParamField body="userId" type="number" required>
+  ID of the user whose preferences should be updated
+</ParamField>
+
+<ParamField body="preferences" type="object" required>
+  Object containing user preferences to update
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the update was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+<ResponseField name="preferences" type="object">
+  Updated preferences object
+</ResponseField>
+
+### Response Examples
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "message": "Preferencias del usuario guardadas",
+  "preferences": {
+    "excludedFunctions": ["reportes"],
+    "theme": "light"
+  }
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Usuario no encontrado"
+}
+```
+</CodeGroup>
+
+### Notes
+
+- The root admin account (`admin@ditzler.com`) has special protection: the "usuarios" function cannot be excluded from their preferences.
+- Preferences are merged with existing values, not replaced entirely.
+- Authentication supports both JWT tokens and legacy email-based authentication for backward compatibility.

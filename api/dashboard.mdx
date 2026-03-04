@@ -1,0 +1,336 @@
+---
+title: "Dashboard API"
+description: "Endpoints for dashboard statistics, activity feed, and productivity charts"
+---
+
+## Get Dashboard Statistics
+
+Retrieve comprehensive statistics for the dashboard overview.
+
+<CodeGroup>
+```bash GET /api/dashboard/stats
+curl -X GET https://api.ditzlertotes.com/api/dashboard/stats \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+</CodeGroup>
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token obtained from login
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Object containing all dashboard statistics
+</ResponseField>
+
+<ResponseField name="data.totalTotes" type="number">
+  Total number of active totes in the system
+</ResponseField>
+
+<ResponseField name="data.totesDisponibles" type="number">
+  Number of available/empty totes
+</ResponseField>
+
+<ResponseField name="data.totesEnUso" type="number">
+  Number of totes currently in use
+</ResponseField>
+
+<ResponseField name="data.totesMantenimiento" type="number">
+  Number of totes in maintenance
+</ResponseField>
+
+<ResponseField name="data.totesFueraPlazo" type="number">
+  Number of totes that are overdue (more than 30 days with client)
+</ResponseField>
+
+<ResponseField name="data.totesPorVencer" type="number">
+  Number of totes expiring within 7 days
+</ResponseField>
+
+<ResponseField name="data.totesEnTransito" type="number">
+  Number of totes in transit (dispatched, en route, or at client)
+</ResponseField>
+
+<ResponseField name="data.clientesActivos" type="number">
+  Number of active clients
+</ResponseField>
+
+<ResponseField name="data.usuariosActivos" type="number">
+  Number of active users
+</ResponseField>
+
+<ResponseField name="data.tiempoRotacion" type="number">
+  Average rotation time in days (time between creation and last modification)
+</ResponseField>
+
+<ResponseField name="data.statusStats" type="array">
+  Array of status statistics with Estado (status name) and cantidad (count)
+</ResponseField>
+
+<ResponseField name="data.topClientes" type="array">
+  Array of top clients with Cliente (client name) and cantidad (tote count)
+</ResponseField>
+
+<ResponseField name="data.totesPorMes" type="array">
+  Array of monthly tote creation statistics with Mes (month) and TotesCreados (count)
+</ResponseField>
+
+<ResponseField name="data.cambios" type="object">
+  Percentage changes for key metrics (totalTotes, totesEnUso, fueraPlazo, usuariosActivos)
+</ResponseField>
+
+### Response Example
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "data": {
+    "totalTotes": 450,
+    "totesDisponibles": 120,
+    "totesEnUso": 300,
+    "totesMantenimiento": 30,
+    "totesFueraPlazo": 15,
+    "totalFueraPlazo": 15,
+    "totalTotesFueraPlazo": 15,
+    "totesProximosVencer": 8,
+    "totesPorVencer": 8,
+    "totesEnTransito": 45,
+    "clientesActivos": 25,
+    "totalClientes": 25,
+    "usuariosActivos": 12,
+    "tiempoRotacion": 14.5,
+    "statusStats": [
+      { "Estado": "TOTE VACIO", "cantidad": 120 },
+      { "Estado": "CLIENTE", "cantidad": 200 },
+      { "Estado": "DESPACHADO", "cantidad": 45 },
+      { "Estado": "EN MANTENCION", "cantidad": 30 }
+    ],
+    "topClientes": [
+      { "Cliente": "Empresa ABC", "cantidad": 85 },
+      { "Cliente": "Industrias XYZ", "cantidad": 62 },
+      { "Cliente": "Distribuidora 123", "cantidad": 53 }
+    ],
+    "totesPorMes": [
+      { "Mes": "2024-01", "TotesCreados": 45 },
+      { "Mes": "2024-02", "TotesCreados": 52 },
+      { "Mes": "2024-03", "TotesCreados": 48 }
+    ],
+    "cambios": {
+      "totalTotes": 3.4,
+      "totesEnUso": 5.1,
+      "fueraPlazo": -2.1,
+      "usuariosActivos": 5.2
+    }
+  }
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Error interno al cargar estadísticas"
+}
+```
+</CodeGroup>
+
+---
+
+## Get Activity Feed
+
+Retrieve recent activity/events for the dashboard feed.
+
+<CodeGroup>
+```bash GET /api/dashboard/activity
+curl -X GET https://api.ditzlertotes.com/api/dashboard/activity \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+</CodeGroup>
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token obtained from login
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of recent activity items (last 20 events)
+</ResponseField>
+
+<ResponseField name="data[].id" type="number">
+  Event unique identifier
+</ResponseField>
+
+<ResponseField name="data[].type" type="string">
+  Event type: CREATE, UPDATE, DELETE, LOGIN, LOGOUT, ERROR, or ALERT
+</ResponseField>
+
+<ResponseField name="data[].description" type="string">
+  Human-readable description of the event
+</ResponseField>
+
+<ResponseField name="data[].user" type="string">
+  Name of the user who triggered the event, or "Sistema" for system events
+</ResponseField>
+
+<ResponseField name="data[].time" type="string">
+  Event timestamp in format "dd/MM/yyyy HH:mm"
+</ResponseField>
+
+<ResponseField name="data[].icon" type="string">
+  Font Awesome icon class for the event
+</ResponseField>
+
+<ResponseField name="data[].module" type="string">
+  Module where the event occurred (LOGIN, TOTES, CLIENTES, USUARIOS, etc.)
+</ResponseField>
+
+### Response Example
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1234,
+      "type": "CREATE",
+      "description": "Nuevo tote T-0453 creado",
+      "user": "Juan Pérez",
+      "time": "04/03/2026 10:30",
+      "icon": "fas fa-box",
+      "module": "TOTES"
+    },
+    {
+      "id": 1233,
+      "type": "UPDATE",
+      "description": "Cliente Empresa ABC actualizado",
+      "user": "María González",
+      "time": "04/03/2026 09:15",
+      "icon": "fas fa-user-friends",
+      "module": "CLIENTES"
+    },
+    {
+      "id": 1232,
+      "type": "LOGIN",
+      "description": "Usuario inició sesión",
+      "user": "Carlos Ruiz",
+      "time": "04/03/2026 08:45",
+      "icon": "fas fa-user-lock",
+      "module": "LOGIN"
+    }
+  ]
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Error interno al cargar actividad"
+}
+```
+</CodeGroup>
+
+---
+
+## Get Productivity Charts
+
+Retrieve data for productivity charts showing event activity over the last 7 days.
+
+<CodeGroup>
+```bash GET /api/dashboard/productivity
+curl -X GET https://api.ditzlertotes.com/api/dashboard/productivity \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+</CodeGroup>
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token obtained from login
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of daily event statistics for the last 7 days
+</ResponseField>
+
+<ResponseField name="data[].fecha" type="string">
+  Date in ISO format (YYYY-MM-DD)
+</ResponseField>
+
+<ResponseField name="data[].eventos" type="number">
+  Number of events that occurred on that date
+</ResponseField>
+
+### Response Example
+
+<CodeGroup>
+```json Success Response
+{
+  "success": true,
+  "data": [
+    {
+      "fecha": "2026-02-26",
+      "eventos": 45
+    },
+    {
+      "fecha": "2026-02-27",
+      "eventos": 52
+    },
+    {
+      "fecha": "2026-02-28",
+      "eventos": 38
+    },
+    {
+      "fecha": "2026-03-01",
+      "eventos": 61
+    },
+    {
+      "fecha": "2026-03-02",
+      "eventos": 48
+    },
+    {
+      "fecha": "2026-03-03",
+      "eventos": 55
+    },
+    {
+      "fecha": "2026-03-04",
+      "eventos": 42
+    }
+  ]
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Error interno al cargar gráficos"
+}
+```
+</CodeGroup>
+
+### Notes
+
+- The statistics endpoint uses a stored procedure (`SP_EstadisticasDashboard`) when available, with fallback to manual queries.
+- Activity feed returns the 20 most recent events ordered by timestamp.
+- Chart data covers the last 7 days from the current date.
+- All date/time values use the server's local timezone.

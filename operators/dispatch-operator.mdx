@@ -1,0 +1,611 @@
+---
+title: Dispatch Operator Workflow
+description: Complete guide for dispatch operations including scanning totes, selecting destinations, and managing movements to internal clients, external clients, and storage areas
+---
+
+# Dispatch Operator Workflow
+
+The Dispatch Operator module manages the movement of totes between different locations, including storage areas and client destinations (both internal and external).
+
+## Overview
+
+Dispatch operators are responsible for:
+- Scanning and identifying totes
+- Moving totes to storage areas
+- Dispatching totes to internal clients (Retail, Helados, Preparados, Trasvase)
+- Dispatching totes to external clients
+- Generating retail codes for Retail dispatches
+- Tracking all tote movements
+
+## Workflow Process
+
+<Steps>
+
+### Step 1: Scan Tote Code
+
+Begin by identifying the tote to be moved.
+
+**Input Methods:**
+- Scan the tote barcode with a scanner
+- Manually type the tote code
+- Press Enter or click "Buscar" to search
+
+**System Search:**
+```javascript
+// Searches for exact code match (case-insensitive)
+const response = await fetch(`/api/totes?codigo=${encodeURIComponent(codigo)}`);
+// Matches against id_tote or Codigo field
+```
+
+**Tote Information Display:**
+Once found, displays:
+- **Tote Code**: Full identification (large, monospace font)
+- **Status Badge**: Current state with color coding
+- **Client**: Currently assigned client
+- **Product**: Current product contents
+- **Current Location**: Where tote is now
+- **Weight**: Product weight if recorded
+
+**Status Badge Colors:**
+- **Green** (disponible): Empty or available totes
+- **Blue** (en-uso): Totes in use or with clients
+
+### Step 2: Select Destination Type
+
+Choose between storage or dispatch to a client.
+
+#### Option A: Almacenamiento (Storage)
+
+Direct storage routing:
+- Click the green "Almacenamiento" button
+- Routes to warehouse/storage areas
+- **Client assignment is cleared**
+- Used for inventory management
+
+**Storage Location Selection:**
+- Modal displays locations from "Despacho" or "Bodega" area
+- Select specific storage location
+- Examples: "Bodega A1", "Almacén Principal"
+
+#### Option B: Despacho (Dispatch)
+
+Expands panel showing client options:
+- Click the yellow "Despacho" button
+- Panel slides down showing all client categories
+- Two sections: Internal Clients and External Clients
+
+### Step 3: Select Client Destination
+
+Depending on the destination, choose the appropriate client type.
+
+#### Internal Clients
+
+Four pre-configured internal clients with dedicated buttons:
+
+**1. Retail (Red gradient)**
+- Routes tote to Retail operations
+- **Automatically generates Retail Code**
+- Code format: `RETAIL-XXXXXX`
+- Code is displayed in success message
+- Client field set to "Retail"
+
+**Retail Code Generation:**
+```javascript
+// Server generates unique retail code using SQL function
+SELECT dbo.FN_GenerarCodigoRetail() as CodigoRetail
+// Code is stored in tote's CodigoRetail field
+```
+
+**2. Helados (Blue gradient)**
+- Routes to ice cream production
+- Client set to "Helados"
+- No special code generation
+
+**3. Preparados (Pink-yellow gradient)**
+- Routes to prepared foods
+- Client set to "Preparados"
+
+**4. Trasvase (Green gradient)**
+- Routes to transfer operations
+- Client set to "Trasvase"
+
+#### External Clients
+
+**Process:**
+1. Click "Confirmar Despacho" button
+2. System checks if tote has assigned client
+3. **Validation Rules:**
+   - Tote must have a client assigned
+   - Client must NOT be internal (Retail, Helados, Preparados, Trasvase)
+   - If internal, prompts to use appropriate internal button
+
+**External Client Dispatch:**
+```javascript
+// Verifies client assignment
+const clienteDestino = toteActual.Cliente;
+if (!clienteDestino || clienteDestino === 'Sin cliente') {
+  // Error: No client assigned
+}
+
+// Checks if internal client
+const clientesInternos = ['Retail', 'Helados', 'Preparados', 'Trasvase'];
+if (clientesInternos.includes(clienteDestino)) {
+  // Warning: Use internal button instead
+}
+
+// Confirms dispatch
+moverTote(clienteDestino, clienteDestino);
+```
+
+**Status Change:**
+- Tote status changes to "CLIENTE"
+- Location updated to "Cliente: [ClientName]"
+
+### Step 4: Select Specific Location
+
+After choosing a client, select the exact location within that area.
+
+**Location Selection Modal:**
+- Title shows selected area (e.g., "Seleccionar Ubicación - Retail")
+- Icon matches area type
+- Dropdown lists all configured locations for that area
+- Shows location name and code
+
+**Location Filtering:**
+```javascript
+// Locations are pre-loaded and filtered by area
+ubicacionesRetail = todasUbicaciones.filter(u => u.Area === 'Retail');
+ubicacionesHelados = todasUbicaciones.filter(u => u.Area === 'Helados');
+// etc.
+```
+
+**Area Icons and Colors:**
+- **Retail**: Store icon (fa-store), Red (#ff5858)
+- **Helados**: Ice cream icon (fa-ice-cream), Cyan (#00f2fe)
+- **Preparados**: Bowl icon (fa-bowl-food), Yellow (#fee140)
+- **Trasvase**: Sync icon (fa-sync), Green (#56ab2f)
+- **Despacho**: Truck icon (fa-truck-loading), Purple (#764ba2)
+- **Bodega**: Warehouse icon (fa-warehouse), Green (#38ef7d)
+
+### Step 5: Confirm Movement
+
+Review and confirm the movement operation.
+
+**Confirmation Process:**
+1. Verify location is correct in dropdown
+2. Click "Confirmar" button (green gradient)
+3. Modal closes
+4. System processes the movement
+
+**Movement API Call:**
+```javascript
+const payload = {
+  toteId: toteActual.Id,
+  codigo: toteActual.Codigo,
+  nuevaUbicacion: ubicacionSeleccionada,
+  usuario: userData.fullname || userData.username,
+  cliente: clienteDestino  // If specified
+};
+
+const response = await fetch('/api/totes/mover', {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload)
+});
+```
+
+### Step 6: Success Confirmation
+
+After successful movement:
+
+**Success Message Displays:**
+```
+✓ Tote E200001234 enviado a Bodega A1
+📦 Cód. Seguimiento: COD-123456  (if present)
+📋 Cód. Retail: RETAIL-789012    (if Retail dispatch)
+```
+
+**Message Duration:**
+- Standard movements: 2 seconds
+- Retail dispatches: 4 seconds (to allow reading retail code)
+
+**Automatic Reset:**
+- Tote information cleared
+- Input field cleared
+- Focus returns to scan field
+- Dispatch panel collapses
+- Ready for next tote
+
+**Local Storage:**
+Movement is saved to browser's localStorage for offline reference:
+```javascript
+{
+  codigo: toteActual.Codigo,
+  ubicacionAnterior: ubicacionAnterior,
+  nuevaUbicacion: nuevaUbicacion,
+  cliente: toteActual.Cliente,
+  fecha: new Date().toISOString(),
+  operador: userData.email,
+  codigoRetail: result.codigoRetail || null
+}
+```
+
+</Steps>
+
+## Business Logic
+
+### Client Assignment Rules
+
+The system applies specific rules based on destination:
+
+| Destination | Client Field | Status | Special Codes |
+|------------|-------------|--------|---------------|
+| Almacenamiento | NULL (cleared) | Unchanged | None |
+| Retail | "Retail" | Unchanged | Retail Code generated |
+| Helados | "Helados" | Unchanged | None |
+| Preparados | "Preparados" | Unchanged | None |
+| Trasvase | "Trasvase" | Unchanged | None |
+| External Client | Client Name | "CLIENTE" | None |
+
+### Retail Code Generation
+
+Special process for Retail dispatches:
+
+**Database Function:**
+```sql
+-- SQL Server function generates unique sequential code
+CREATE FUNCTION FN_GenerarCodigoRetail()
+RETURNS NVARCHAR(50)
+AS BEGIN
+  -- Logic to generate next sequential RETAIL-XXXXXX code
+  -- Ensures uniqueness across all totes
+END
+```
+
+**Code Storage:**
+- Stored in `Totes.CodigoRetail` field
+- Displayed in success message
+- Used for retail tracking and invoicing
+- Format: `RETAIL-` followed by 6-digit number
+
+### Tracking Code Display
+
+If tote has a tracking code (from filling), it's displayed in success message:
+- Tracking codes are generated during filling process
+- Format: `COD-XXXXXX`
+- Stored in `Totes.CodigoBarra` field
+- Used for end-to-end product tracing
+
+### Location Validation
+
+<Warning>
+**No Locations Configured:**
+If an area has no configured locations:
+- Error message: "No hay ubicaciones configuradas para [Area]"
+- Button remains disabled
+- Administrator must create locations first
+- Check Location Management in admin panel
+</Warning>
+
+## Event Logging and Auditing
+
+All movements are logged in the `Eventos` table:
+
+```sql
+INSERT INTO Eventos 
+(ToteId, TipEvento, Descripcion, Usuario, FechaEvento, Severidad, Modulo, Accion, DatosAdicionales, ResultadoExitoso)
+VALUES 
+(@toteId, 'CambioEstado', @descripcion, @usuario, @fechaEvento, 'Info', 'DESPACHO', 'MOVER_TOTE', @datosAdicionales, 1)
+```
+
+**Event Data (`DatosAdicionales` JSON):**
+```json
+{
+  "ubicacionAnterior": "Llenado",
+  "nuevaUbicacion": "Bodega A1",
+  "cliente": "Sin cliente",
+  "codigo": "E200001234",
+  "codigoBarra": "COD-123456",
+  "codigoRetail": "RETAIL-789012"  // If applicable
+}
+```
+
+**Event Description Examples:**
+- "Movido de Llenado a Bodega A1"
+- "Movido de Almacenamiento a Retail - Código Retail: RETAIL-123456"
+
+## User Interface Features
+
+### Scan Section
+
+Purple gradient banner at top:
+- Large, prominent input field
+- Search button with icon
+- Auto-focus on page load
+- Enter key triggers search
+
+### Tote Information Card
+
+White card with shadow:
+- **Header Row**: Code (left) + Status badge (right)
+- **Details Grid**: 4 columns (responsive to 2x2 on mobile)
+- **Fade-in Animation**: 0.3s ease
+- **Active Class**: Shows when tote loaded
+
+### Destination Buttons
+
+Large, visual buttons:
+- **Hover Effect**: Lifts 5px with shadow
+- **Icons**: Large 3rem icons
+- **Title**: 1.4rem bold text
+- **Description**: Smaller subtitle text
+- **Disabled State**: 50% opacity, no hover
+
+**Button Gradients:**
+- Almacenamiento: Green (teal to emerald)
+- Despacho: Pink to yellow
+
+### Client Panel (Expandable)
+
+Collapsible section:
+- **Collapsed State**: `max-height: 0`, hidden
+- **Expanded State**: `max-height: 500px`, visible
+- **Transition**: 0.4s ease animation
+- **Toggle Icon**: Rotates 180° when expanded
+
+**Internal Clients Grid:**
+- 4 columns on desktop
+- 2 columns on tablet
+- 2x2 grid on mobile
+- Color-coded by client type
+
+**External Client Section:**
+- Single centered button
+- Purple gradient
+- Truck icon
+- Max width 300px
+
+### Location Selection Modal
+
+Centered modal overlay:
+- **Backdrop**: 60% black opacity
+- **Modal**: White, rounded corners, shadow
+- **Animation**: Slide-in from top
+- **Width**: 90% max 450px
+- **Close Methods**: X button, Cancel button, backdrop click
+
+### Toast Notifications
+
+Top-right corner notifications:
+- **Position**: Fixed, `top: 20px, right: 20px`
+- **Width**: Max 400px
+- **Animation**: Slide in from right
+- **Duration**: 5 seconds auto-hide
+- **White Space**: `pre-line` for multi-line messages
+
+## Mobile Responsiveness
+
+### Tablet (768px and below)
+
+```css
+.location-buttons {
+  grid-template-columns: 1fr;  /* Stack vertically */
+}
+.client-buttons {
+  grid-template-columns: repeat(2, 1fr);  /* 2x2 grid */
+}
+.tote-details {
+  grid-template-columns: 1fr 1fr;  /* 2 columns */
+}
+```
+
+### Mobile (480px and below)
+
+```css
+.tote-details {
+  grid-template-columns: 1fr;  /* Single column */
+}
+.modal-footer {
+  flex-direction: column;  /* Stack buttons */
+}
+```
+
+### Touch Optimizations
+
+- Larger button padding for touch targets
+- Prevented double-tap zoom
+- Mobile menu toggle in header
+- Bottom navigation bar
+- Optimized font sizes
+
+## History and Tracking
+
+### Movement History Page
+
+Operators can view their movements:
+- Link: "Ver Historial de Mis Movimientos"
+- Navigates to: `operador-despacho-historial.html`
+- Shows movements filtered by operator
+- Includes date, tote code, locations, client
+
+### Local Storage Backup
+
+Movements saved to localStorage:
+- Key: `movimientosDespacho`
+- Array of movement objects
+- Max 500 entries (FIFO)
+- Used for offline reference
+- Can be synced later if needed
+
+## API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|----------|
+| `/api/totes` | GET | Search tote by code (query param) |
+| `/api/ubicaciones` | GET | Load all locations |
+| `/api/clientes` | GET | Load external client list |
+| `/api/totes/mover` | PUT | Move tote to new location |
+| `/api/eventos` | POST | Log movement event |
+
+## Error Handling
+
+### Common Errors and Solutions
+
+<Warning>
+**Tote Not Found:**
+```
+No se encontró el tote [CODE]
+```
+**Solutions:**
+- Verify code spelling
+- Check if tote is active in system
+- Ensure tote hasn't been deleted
+- Contact admin if tote should exist
+</Warning>
+
+<Warning>
+**Same Location:**
+```
+El tote ya está en [Location]
+```
+**Explanation:**
+- Tote is already at selected location
+- No movement needed
+- Select different destination or clear and scan next tote
+</Warning>
+
+<Warning>
+**No Client Assigned (External Dispatch):**
+```
+El tote no tiene un cliente asignado
+```
+**Solutions:**
+- Tote must have client set before external dispatch
+- Use admin panel to assign client
+- Or use internal client buttons if applicable
+</Warning>
+
+<Warning>
+**Internal Client Error:**
+```
+El cliente asignado es interno (Retail). Utilice el botón correspondiente arriba.
+```
+**Explanation:**
+- Trying to use external dispatch for internal client
+- Use the colored client buttons instead
+- System prevents incorrect routing
+</Warning>
+
+### Network Errors
+
+**Connection Failed:**
+- Check internet connection
+- Verify server is accessible
+- Movement saved to localStorage
+- Retry when connection restored
+
+**Session Expired:**
+- User redirected to login page
+- Session timeout after inactivity
+- Re-login required
+
+## Best Practices
+
+<Tip>
+**Scanning Efficiency:**
+- Configure scanner for Enter key termination
+- Keep scanner powered and ready
+- Use keyboard for quick corrections
+- System auto-focuses input after each movement
+</Tip>
+
+<Tip>
+**Location Selection:**
+- Familiarize yourself with location codes
+- Use consistent location naming
+- Verify location before confirming
+- Report missing locations to administrator
+</Tip>
+
+<Tip>
+**Client Dispatch:**
+- Always verify client assignment before external dispatch
+- Use internal buttons for Retail, Helados, Preparados, Trasvase
+- Note retail codes for invoicing
+- Check tracking codes for traceability
+</Tip>
+
+<Tip>
+**Record Keeping:**
+- Review "Mis Movimientos" regularly
+- Verify movements were recorded
+- Report discrepancies immediately
+- Retail codes are critical for accounting
+</Tip>
+
+## Troubleshooting
+
+### Scanner Not Working
+
+1. Test scanner in notepad/text editor
+2. Verify scanner is in keyboard emulation mode
+3. Check USB connection
+4. Ensure scanner sends Enter key after scan
+5. Re-pair wireless scanner if applicable
+
+### Location Not in Dropdown
+
+1. Verify location exists in admin panel
+2. Check location's area assignment matches
+3. Ensure location is marked active
+4. Refresh page to reload locations
+5. Contact administrator to create/update location
+
+### Movement Not Saving
+
+1. Check browser console for errors
+2. Verify session is still valid
+3. Test network connection
+4. Check if tote is locked by another user
+5. Try logging out and back in
+6. Check localStorage for backup copy
+
+### Button Disabled
+
+- Ensure tote is scanned and loaded
+- Verify locations configured for that area
+- Check if modal is already open
+- Refresh page if buttons stuck disabled
+
+## Integration Points
+
+### Filling Operator Integration
+
+Totes filled by filling operators:
+- Already have tracking codes
+- Already assigned to client
+- May have default location set
+- Dispatch operator moves to final destination
+
+### Tote Operator Integration
+
+Totes processed by tote operators:
+- May be routed to reprocessing or washing
+- Dispatch operator handles post-processing movements
+- Coordinates with tote operator on tote readiness
+
+### Admin Panel Integration
+
+- Administrators configure locations
+- Client assignments managed in admin
+- Movement history viewable in admin reports
+- Retail codes tracked in admin invoicing
+
+## Related Documentation
+
+- [Filling Operator Workflow](/operators/filling-operator) - Initial tote filling and tracking code generation
+- [Tote Operator Workflow](/operators/tote-operator) - Tote reception and routing to processing
+- [Location Management](/admin/locations) - Creating and managing locations
+- [Client Management](/admin/clients) - Managing client information and default locations
+- [Tracking Codes](/features/tracking) - Understanding tracking and retail code systems
+- [Event Logging](/features/events) - Viewing and analyzing movement history

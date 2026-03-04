@@ -1,0 +1,493 @@
+---
+title: Database Tables
+description: Detailed documentation of all database tables, columns, constraints, and indexes in the DitzlerTotes system
+---
+
+## Usuarios (Users)
+
+The Usuarios table manages user authentication, authorization, and preferences.
+
+### Table Structure
+
+```sql
+CREATE TABLE Usuarios (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre NVARCHAR(100) NOT NULL,
+    Apellido NVARCHAR(100) NOT NULL,
+    Password NVARCHAR(255) NOT NULL,
+    Email NVARCHAR(255) NOT NULL UNIQUE,
+    Rol NVARCHAR(500) NOT NULL DEFAULT 'Operador',
+    Estado NVARCHAR(20) NOT NULL DEFAULT 'Activo',
+    Preferencias NVARCHAR(MAX) NULL,
+    FechaCreacion DATETIME NOT NULL DEFAULT GETDATE(),
+    FechaModificacion DATETIME NOT NULL DEFAULT GETDATE()
+);
+```
+
+### Column Definitions
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| **Id** | INT | PRIMARY KEY, IDENTITY | Auto-incrementing user identifier |
+| **Nombre** | NVARCHAR(100) | NOT NULL | User's first name |
+| **Apellido** | NVARCHAR(100) | NOT NULL | User's last name |
+| **Password** | NVARCHAR(255) | NOT NULL | Hashed password (bcrypt in application) |
+| **Email** | NVARCHAR(255) | NOT NULL, UNIQUE | User email (login identifier) |
+| **Rol** | NVARCHAR(500) | NOT NULL | Comma-separated roles list |
+| **Estado** | NVARCHAR(20) | NOT NULL | 'Activo' or 'Inactivo' |
+| **Preferencias** | NVARCHAR(MAX) | NULL | JSON string for UI preferences |
+| **FechaCreacion** | DATETIME | NOT NULL | Record creation timestamp |
+| **FechaModificacion** | DATETIME | NOT NULL | Last modification timestamp |
+
+### Available Roles
+
+- `Administrador` - Full system access
+- `Visor` - Read-only dashboard access
+- `Operador Totes` - Tote management operations
+- `Operador Despacho` - Dispatch operations
+- `Operador de Llenado de Totes` - Fill operations
+
+### Indexes
+
+```sql
+-- Primary Key (automatic)
+CREATE UNIQUE CLUSTERED INDEX PK_Usuarios ON Usuarios(Id);
+
+-- Unique Email Index (automatic)
+CREATE UNIQUE NONCLUSTERED INDEX UQ_Usuarios_Email ON Usuarios(Email);
+
+-- Estado lookup optimization
+CREATE NONCLUSTERED INDEX IX_Usuarios_Estado ON Usuarios(Estado);
+
+-- Role filtering
+CREATE NONCLUSTERED INDEX IX_Usuarios_Rol ON Usuarios(Rol);
+```
+
+### Example Data
+
+```sql
+INSERT INTO Usuarios (Nombre, Apellido, Password, Email, Rol, Estado)
+VALUES 
+('Admin', 'Sistema', 'admin123', 'admin@ditzler.com', 'Administrador', 'Activo'),
+('Juan', 'Pérez', 'totes123', 'operador.totes@ditzler.com', 'Operador Totes', 'Activo'),
+('Maria', 'González', 'multi123', 'maria@ditzler.com', 'Administrador, Operador de Llenado de Totes', 'Activo');
+```
+
+---
+
+## Clientes (Clients)
+
+The Clientes table stores customer and business partner information.
+
+### Table Structure
+
+```sql
+CREATE TABLE Clientes (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    logo NVARCHAR(500) NULL,
+    nombre_empresa NVARCHAR(255) NOT NULL,
+    contacto_principal NVARCHAR(255) NOT NULL,
+    email NVARCHAR(255) NULL,
+    telefono NVARCHAR(20) NULL,
+    direccion NVARCHAR(500) NULL,
+    ciudad NVARCHAR(100) NULL,
+    pais NVARCHAR(100) NULL,
+    codigo_postal NVARCHAR(20) NULL,
+    tipo NVARCHAR(50) NULL,
+    estado NVARCHAR(20) NOT NULL DEFAULT 'Activo',
+    UbicacionDefecto NVARCHAR(100) NULL,
+    fecha_registro DATETIME NOT NULL DEFAULT GETDATE(),
+    fecha_modificacion DATETIME NOT NULL DEFAULT GETDATE(),
+    notas NVARCHAR(MAX) NULL
+);
+```
+
+### Column Definitions
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| **id** | INT | PRIMARY KEY, IDENTITY | Client identifier |
+| **logo** | NVARCHAR(500) | NULL | Logo URL or base64 data |
+| **nombre_empresa** | NVARCHAR(255) | NOT NULL | Company name |
+| **contacto_principal** | NVARCHAR(255) | NOT NULL | Primary contact person |
+| **email** | NVARCHAR(255) | NULL | Contact email |
+| **telefono** | NVARCHAR(20) | NULL | Phone number |
+| **direccion** | NVARCHAR(500) | NULL | Street address |
+| **ciudad** | NVARCHAR(100) | NULL | City |
+| **pais** | NVARCHAR(100) | NULL | Country |
+| **codigo_postal** | NVARCHAR(20) | NULL | Postal/ZIP code |
+| **tipo** | NVARCHAR(50) | NULL | Client type classification |
+| **estado** | NVARCHAR(20) | NOT NULL | 'Activo' or 'Inactivo' |
+| **UbicacionDefecto** | NVARCHAR(100) | NULL | Default location for this client |
+| **fecha_registro** | DATETIME | NOT NULL | Registration date |
+| **fecha_modificacion** | DATETIME | NOT NULL | Last update timestamp |
+| **notas** | NVARCHAR(MAX) | NULL | Additional notes |
+
+### Indexes
+
+```sql
+CREATE NONCLUSTERED INDEX IX_Clientes_NombreEmpresa ON Clientes(nombre_empresa);
+CREATE NONCLUSTERED INDEX IX_Clientes_Email ON Clientes(email);
+CREATE NONCLUSTERED INDEX IX_Clientes_Estado ON Clientes(estado);
+CREATE NONCLUSTERED INDEX IX_Clientes_Ciudad ON Clientes(ciudad);
+CREATE NONCLUSTERED INDEX IX_Clientes_Tipo ON Clientes(tipo);
+```
+
+---
+
+## Totes (Containers)
+
+The core table for tracking container inventory, status, and history.
+
+### Table Structure
+
+```sql
+CREATE TABLE Totes (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    Codigo NVARCHAR(50) NOT NULL UNIQUE,
+    Estado NVARCHAR(30) NOT NULL DEFAULT 'TOTE VACIO',
+    Ubicacion NVARCHAR(100) NULL,
+    Cliente NVARCHAR(255) NULL,
+    Usuario NVARCHAR(255) NULL,
+    Producto NVARCHAR(255) NULL,
+    Lote NVARCHAR(100) NULL,
+    FechaDespacho DATETIME NULL,
+    FechaRetorno DATETIME NULL,
+    Alerta NVARCHAR(20) NULL,
+    Peso DECIMAL(10,2) NULL,
+    CodigoRetail NVARCHAR(50) NULL,
+    UsuarioCreacion NVARCHAR(255) NULL,
+    UsuarioModificacion NVARCHAR(255) NULL,
+    FechaCreacion DATETIME NOT NULL DEFAULT GETDATE(),
+    FechaModificacion DATETIME NOT NULL DEFAULT GETDATE(),
+    Activo BIT NOT NULL DEFAULT 1,
+    Observaciones NVARCHAR(MAX) NULL
+);
+```
+
+### Column Definitions
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| **Id** | INT | PRIMARY KEY, IDENTITY | Tote identifier |
+| **Codigo** | NVARCHAR(50) | NOT NULL, UNIQUE | Tote code (TOTE-0001) |
+| **Estado** | NVARCHAR(30) | NOT NULL | Current status |
+| **Ubicacion** | NVARCHAR(100) | NULL | Current location |
+| **Cliente** | NVARCHAR(255) | NULL | Assigned client name |
+| **Usuario** | NVARCHAR(255) | NULL | Assigned operator/user |
+| **Producto** | NVARCHAR(255) | NULL | Product contained |
+| **Lote** | NVARCHAR(100) | NULL | Batch/lot number |
+| **FechaDespacho** | DATETIME | NULL | Dispatch date |
+| **FechaRetorno** | DATETIME | NULL | Expected/actual return date |
+| **Alerta** | NVARCHAR(20) | NULL | Alert level (Baja/Media/Alta/Crítica) |
+| **Peso** | DECIMAL(10,2) | NULL | Weight in kilograms |
+| **CodigoRetail** | NVARCHAR(50) | NULL | Retail/tracking code (COD-000001) |
+| **UsuarioCreacion** | NVARCHAR(255) | NULL | User who created record |
+| **UsuarioModificacion** | NVARCHAR(255) | NULL | Last user to modify |
+| **FechaCreacion** | DATETIME | NOT NULL | Creation timestamp |
+| **FechaModificacion** | DATETIME | NOT NULL | Last modification timestamp |
+| **Activo** | BIT | NOT NULL | Soft delete flag (1=active) |
+| **Observaciones** | NVARCHAR(MAX) | NULL | Additional notes |
+
+### Estado Values
+
+- `TOTE VACIO` - Empty container, available for use
+- `CLIENTE` - Dispatched to client
+- `EN MANTENCION` - Under maintenance
+- `LAVADO` - In washing/cleaning
+- `REPROCESO` - In reprocessing
+- `DESECHO` - Marked for disposal
+
+### Indexes
+
+```sql
+CREATE UNIQUE CLUSTERED INDEX PK_Totes ON Totes(Id);
+CREATE UNIQUE NONCLUSTERED INDEX UQ_Totes_Codigo ON Totes(Codigo);
+CREATE NONCLUSTERED INDEX IX_Totes_Estado ON Totes(Estado) INCLUDE (Activo);
+CREATE NONCLUSTERED INDEX IX_Totes_Ubicacion ON Totes(Ubicacion);
+CREATE NONCLUSTERED INDEX IX_Totes_Cliente ON Totes(Cliente);
+CREATE NONCLUSTERED INDEX IX_Totes_Producto ON Totes(Producto);
+CREATE NONCLUSTERED INDEX IX_Totes_FechaDespacho ON Totes(FechaDespacho);
+CREATE NONCLUSTERED INDEX IX_Totes_FechaRetorno ON Totes(FechaRetorno);
+CREATE NONCLUSTERED INDEX IX_Totes_Activo ON Totes(Activo);
+CREATE NONCLUSTERED INDEX IX_Totes_CodigoRetail ON Totes(CodigoRetail);
+CREATE NONCLUSTERED INDEX IX_Totes_Lote ON Totes(Lote);
+```
+
+### Example Query
+
+```sql
+-- Find all totes dispatched to a client that are overdue for return
+SELECT Codigo, Cliente, FechaDespacho, FechaRetorno, 
+       DATEDIFF(day, FechaRetorno, GETDATE()) as DiasVencidos
+FROM Totes
+WHERE Activo = 1 
+  AND Estado = 'CLIENTE'
+  AND FechaRetorno IS NOT NULL
+  AND FechaRetorno < GETDATE()
+ORDER BY DiasVencidos DESC;
+```
+
+---
+
+## Llenados_Totes (Fill Operations)
+
+Tracks all tote filling operations with weight measurements and RFID tracking.
+
+### Table Structure
+
+```sql
+CREATE TABLE Llenados_Totes (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    RFID_Tag NVARCHAR(100) NOT NULL,
+    Peso_Bruto DECIMAL(10, 2) NOT NULL,
+    Peso_Neto DECIMAL(10, 2) NOT NULL,
+    Tara DECIMAL(10, 2) NOT NULL,
+    Producto NVARCHAR(255),
+    Lote NVARCHAR(100),
+    Usuario NVARCHAR(100) NOT NULL,
+    Nombre_Operador NVARCHAR(200),
+    Balanza INT,
+    Copias INT DEFAULT 1,
+    Fecha_Registro DATETIME DEFAULT GETDATE(),
+    CodigoBarra NVARCHAR(100) NULL,
+    Sincronizado BIT DEFAULT 0
+);
+```
+
+### Column Definitions
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| **Id** | INT | PRIMARY KEY, IDENTITY | Fill operation ID |
+| **RFID_Tag** | NVARCHAR(100) | NOT NULL | RFID tag identifier |
+| **Peso_Bruto** | DECIMAL(10,2) | NOT NULL | Gross weight (kg) |
+| **Peso_Neto** | DECIMAL(10,2) | NOT NULL | Net weight (kg) |
+| **Tara** | DECIMAL(10,2) | NOT NULL | Tare weight (kg) |
+| **Producto** | NVARCHAR(255) | NULL | Product filled |
+| **Lote** | NVARCHAR(100) | NULL | Batch number |
+| **Usuario** | NVARCHAR(100) | NOT NULL | Operator username |
+| **Nombre_Operador** | NVARCHAR(200) | NULL | Operator full name |
+| **Balanza** | INT | NULL | Scale/balance ID |
+| **Copias** | INT | DEFAULT 1 | Number of label copies |
+| **Fecha_Registro** | DATETIME | DEFAULT GETDATE() | Registration timestamp |
+| **CodigoBarra** | NVARCHAR(100) | NULL | Generated barcode |
+| **Sincronizado** | BIT | DEFAULT 0 | Sync status with main Totes |
+
+### Indexes
+
+```sql
+CREATE NONCLUSTERED INDEX IX_Llenados_RFID ON Llenados_Totes(RFID_Tag);
+CREATE NONCLUSTERED INDEX IX_Llenados_FechaRegistro ON Llenados_Totes(Fecha_Registro);
+CREATE NONCLUSTERED INDEX IX_Llenados_Usuario ON Llenados_Totes(Usuario);
+CREATE NONCLUSTERED INDEX IX_Llenados_Producto ON Llenados_Totes(Producto);
+CREATE NONCLUSTERED INDEX IX_Llenados_CodigoBarra ON Llenados_Totes(CodigoBarra);
+```
+
+---
+
+## Eventos (Events/Audit Log)
+
+Comprehensive audit trail for all system operations.
+
+### Table Structure
+
+```sql
+CREATE TABLE Eventos (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    ToteId INT NULL,
+    TipEvento NVARCHAR(50) NOT NULL,
+    Descripcion NVARCHAR(500) NOT NULL,
+    Usuario NVARCHAR(255) NULL,
+    FechaEvento DATETIME NOT NULL DEFAULT GETDATE(),
+    DatosAdicionales NVARCHAR(MAX) NULL,
+    IpAddress NVARCHAR(45) NULL,
+    UserAgent NVARCHAR(500) NULL,
+    Severidad NVARCHAR(20) NOT NULL DEFAULT 'Info',
+    Modulo NVARCHAR(50) NULL,
+    Accion NVARCHAR(100) NULL,
+    ResultadoExitoso BIT NOT NULL DEFAULT 1,
+    TiempoEjecucion INT NULL,
+    SessionId NVARCHAR(100) NULL,
+    FOREIGN KEY (ToteId) REFERENCES Totes(Id) ON DELETE SET NULL
+);
+```
+
+### Column Definitions
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| **Id** | INT | PRIMARY KEY, IDENTITY | Event ID |
+| **ToteId** | INT | FK to Totes, NULL | Related tote (optional) |
+| **TipEvento** | NVARCHAR(50) | NOT NULL | Event type |
+| **Descripcion** | NVARCHAR(500) | NOT NULL | Event description |
+| **Usuario** | NVARCHAR(255) | NULL | User who triggered event |
+| **FechaEvento** | DATETIME | NOT NULL | Event timestamp |
+| **DatosAdicionales** | NVARCHAR(MAX) | NULL | JSON metadata |
+| **IpAddress** | NVARCHAR(45) | NULL | Client IP address |
+| **UserAgent** | NVARCHAR(500) | NULL | Browser user agent |
+| **Severidad** | NVARCHAR(20) | NOT NULL | Severity level |
+| **Modulo** | NVARCHAR(50) | NULL | System module |
+| **Accion** | NVARCHAR(100) | NULL | Action performed |
+| **ResultadoExitoso** | BIT | NOT NULL | Success flag |
+| **TiempoEjecucion** | INT | NULL | Execution time (ms) |
+| **SessionId** | NVARCHAR(100) | NULL | User session ID |
+
+### Severidad Levels
+
+- `Debug` - Debugging information
+- `Info` - Informational messages
+- `Warning` - Warning conditions
+- `Error` - Error conditions
+- `Critical` - Critical failures
+
+### Indexes
+
+```sql
+CREATE NONCLUSTERED INDEX IX_Eventos_ToteId ON Eventos(ToteId);
+CREATE NONCLUSTERED INDEX IX_Eventos_FechaEvento ON Eventos(FechaEvento DESC);
+CREATE NONCLUSTERED INDEX IX_Eventos_Usuario ON Eventos(Usuario);
+CREATE NONCLUSTERED INDEX IX_Eventos_TipEvento ON Eventos(TipEvento);
+CREATE NONCLUSTERED INDEX IX_Eventos_Severidad ON Eventos(Severidad);
+CREATE NONCLUSTERED INDEX IX_Eventos_Modulo ON Eventos(Modulo);
+CREATE NONCLUSTERED INDEX IX_Eventos_SessionId ON Eventos(SessionId);
+CREATE NONCLUSTERED INDEX IX_Eventos_ResultadoExitoso ON Eventos(ResultadoExitoso);
+CREATE NONCLUSTERED INDEX IX_Eventos_Accion ON Eventos(Accion);
+```
+
+---
+
+## Productos (Products)
+
+Catalog of products that can be stored in totes.
+
+### Table Structure
+
+```sql
+CREATE TABLE Productos (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre NVARCHAR(100) NOT NULL,
+    Descripcion NVARCHAR(500) NULL,
+    Codigo NVARCHAR(50) NULL,
+    Categoria NVARCHAR(50) NULL,
+    Ingredientes NVARCHAR(MAX) NULL,
+    Clientes NVARCHAR(MAX) NULL,
+    FechaVencimiento DATETIME NULL,
+    Estado NVARCHAR(20) NOT NULL DEFAULT 'Activo',
+    FechaCreacion DATETIME DEFAULT GETDATE(),
+    FechaModificacion DATETIME DEFAULT GETDATE()
+);
+```
+
+### Column Definitions
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| **Id** | INT | PRIMARY KEY, IDENTITY | Product ID |
+| **Nombre** | NVARCHAR(100) | NOT NULL | Product name |
+| **Descripcion** | NVARCHAR(500) | NULL | Product description |
+| **Codigo** | NVARCHAR(50) | NULL | Product code/SKU |
+| **Categoria** | NVARCHAR(50) | NULL | Category (Dulces, Aceites, etc) |
+| **Ingredientes** | NVARCHAR(MAX) | NULL | JSON list of ingredients |
+| **Clientes** | NVARCHAR(MAX) | NULL | JSON list of assigned clients |
+| **FechaVencimiento** | DATETIME | NULL | Product expiration date |
+| **Estado** | NVARCHAR(20) | NOT NULL | 'Activo' or 'Inactivo' |
+| **FechaCreacion** | DATETIME | DEFAULT GETDATE() | Creation timestamp |
+| **FechaModificacion** | DATETIME | DEFAULT GETDATE() | Last update timestamp |
+
+### Categories
+
+- `Dulces` - Sweets/Confectionery
+- `Aceites` - Oils
+- `Jarabes` - Syrups
+- `Esencias` - Essences/Flavors
+
+### Indexes
+
+```sql
+CREATE NONCLUSTERED INDEX IX_Productos_Nombre ON Productos(Nombre);
+CREATE NONCLUSTERED INDEX IX_Productos_Codigo ON Productos(Codigo);
+CREATE NONCLUSTERED INDEX IX_Productos_Categoria ON Productos(Categoria);
+CREATE NONCLUSTERED INDEX IX_Productos_Estado ON Productos(Estado);
+```
+
+---
+
+## Ubicaciones (Locations)
+
+Warehouse locations and zones for tote storage.
+
+### Table Structure
+
+```sql
+CREATE TABLE Ubicaciones (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre NVARCHAR(100) NOT NULL,
+    Descripcion NVARCHAR(500) NULL,
+    Codigo NVARCHAR(50) NULL,
+    Tipo NVARCHAR(50) NULL,
+    Area NVARCHAR(50) DEFAULT 'General',
+    Capacidad INT NULL,
+    ClientesAsignados NVARCHAR(MAX) NULL,
+    Estado NVARCHAR(20) NOT NULL DEFAULT 'Activo',
+    FechaCreacion DATETIME DEFAULT GETDATE(),
+    FechaModificacion DATETIME DEFAULT GETDATE()
+);
+```
+
+### Column Definitions
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| **Id** | INT | PRIMARY KEY, IDENTITY | Location ID |
+| **Nombre** | NVARCHAR(100) | NOT NULL | Location name |
+| **Descripcion** | NVARCHAR(500) | NULL | Location description |
+| **Codigo** | NVARCHAR(50) | NULL | Location code (ALM-001) |
+| **Tipo** | NVARCHAR(50) | NULL | Type classification |
+| **Area** | NVARCHAR(50) | DEFAULT 'General' | Area classification |
+| **Capacidad** | INT | NULL | Maximum capacity |
+| **ClientesAsignados** | NVARCHAR(MAX) | NULL | JSON list of assigned clients |
+| **Estado** | NVARCHAR(20) | NOT NULL | 'Activo' or 'Inactivo' |
+| **FechaCreacion** | DATETIME | DEFAULT GETDATE() | Creation timestamp |
+| **FechaModificacion** | DATETIME | DEFAULT GETDATE() | Last update timestamp |
+
+### Tipo Values
+
+- `Almacén` - Warehouse/Storage
+- `Operativo` - Operational area
+- `Producción` - Production area
+- `Despacho` - Dispatch area
+- `Mantenimiento` - Maintenance area
+
+### Area Values
+
+- `General` - General purpose
+- `Almacenamiento` - Storage
+- `Llenado` - Filling operations
+- `Despacho` - Dispatch
+- `Mantenimiento` - Maintenance
+- `Lavado` - Washing/cleaning
+- `Calidad` - Quality control
+- `Reproceso` - Reprocessing
+- `Desecho` - Disposal
+
+### Indexes
+
+```sql
+CREATE NONCLUSTERED INDEX IX_Ubicaciones_Nombre ON Ubicaciones(Nombre);
+CREATE NONCLUSTERED INDEX IX_Ubicaciones_Codigo ON Ubicaciones(Codigo);
+CREATE NONCLUSTERED INDEX IX_Ubicaciones_Tipo ON Ubicaciones(Tipo);
+CREATE NONCLUSTERED INDEX IX_Ubicaciones_Estado ON Ubicaciones(Estado);
+```
+
+### Default Locations
+
+```sql
+INSERT INTO Ubicaciones (Nombre, Descripcion, Codigo, Tipo, Area, Capacidad)
+VALUES 
+('Almacén Principal', 'Bodega principal', 'ALM-001', 'Almacén', 'Almacenamiento', 1000),
+('Sala Llenado', 'Sala Llenado', 'LLEN-001', 'Operativo', 'Llenado', 500),
+('Área de Despacho', 'Zona despacho', 'DESP-001', 'Operativo', 'Despacho', 500),
+('Área de Lavado', 'Lavado', 'LAV-001', 'Operativo', 'Lavado', 300),
+('Taller de Mantenimiento', 'Reparación de totes', 'MANT-001', 'Operativo', 'Mantenimiento', 50);
+```

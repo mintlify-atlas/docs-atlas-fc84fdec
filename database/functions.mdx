@@ -1,0 +1,490 @@
+---
+title: SQL Functions
+description: Documentation for SQL scalar functions used in the DitzlerTotes database for code generation, validation, and calculations
+---
+
+## Overview
+
+The DitzlerTotes database implements 3 scalar functions that provide reusable logic for code generation and calculations.
+
+| Function | Return Type | Purpose | Used By |
+|----------|-------------|---------|----------|
+| `FN_GenerarCodigoTote` | NVARCHAR(20) | Generate sequential tote codes | SP_CrearTote, INSERT triggers |
+| `FN_DiasHastaVencimiento` | INT | Calculate days until expiration | Dashboard queries, reports |
+| `FN_GenerarCodigoSeguimiento` | NVARCHAR(50) | Generate retail/tracking codes | Llenado operations |
+
+---
+
+## FN_GenerarCodigoTote
+
+Generates the next sequential tote code in the format `TOTE-####`.
+
+### Syntax
+
+```sql
+CREATE FUNCTION FN_GenerarCodigoTote()
+RETURNS NVARCHAR(20)
+AS
+BEGIN
+    DECLARE @codigo NVARCHAR(20);
+    DECLARE @contador INT;
+    
+    SELECT @contador = ISNULL(MAX(CAST(SUBSTRING(Codigo, 6, LEN(Codigo)-5) AS INT)), 0) + 1
+    FROM Totes 
+    WHERE Codigo LIKE 'TOTE-%' 
+      AND ISNUMERIC(SUBSTRING(Codigo, 6, LEN(Codigo)-5)) = 1;
+    
+    SET @codigo = 'TOTE-' + RIGHT('0000' + CAST(@contador AS NVARCHAR), 4);
+    
+    RETURN @codigo;
+END
+```
+
+### Parameters
+
+None - this function takes no parameters.
+
+### Returns
+
+- **Type:** NVARCHAR(20)
+- **Format:** `TOTE-####` where `####` is a zero-padded 4-digit sequential number
+- **Examples:** `TOTE-0001`, `TOTE-0042`, `TOTE-9999`
+
+### Logic Explanation
+
+1. Queries the Totes table for all codes matching pattern `TOTE-%`
+2. Extracts the numeric portion after `TOTE-`
+3. Finds the maximum numeric value and adds 1
+4. Zero-pads the result to 4 digits
+5. Returns the formatted code
+
+### Usage Examples
+
+#### Example 1: Generate Code Directly
+
+```sql
+SELECT dbo.FN_GenerarCodigoTote() AS NuevoCodigo;
+-- Result: TOTE-0001 (if no totes exist)
+```
+
+#### Example 2: Use in INSERT Statement
+
+```sql
+INSERT INTO Totes (Codigo, Estado, Ubicacion)
+VALUES (dbo.FN_GenerarCodigoTote(), 'TOTE VACIO', 'Almacén Principal');
+```
+
+#### Example 3: Use in Stored Procedure
+
+```sql
+CREATE PROCEDURE SP_CrearToteConCodigoAuto
+    @ubicacion NVARCHAR(100)
+AS
+BEGIN
+    DECLARE @nuevoCodigo NVARCHAR(20) = dbo.FN_GenerarCodigoTote();
+    
+    INSERT INTO Totes (Codigo, Estado, Ubicacion)
+    VALUES (@nuevoCodigo, 'TOTE VACIO', @ubicacion);
+    
+    SELECT @nuevoCodigo AS CodigoGenerado;
+END
+```
+
+#### Example 4: Verify Next Code Without Inserting
+
+```sql
+-- Check what the next tote code will be
+SELECT 
+    MAX(Codigo) AS UltimoCodigo,
+    dbo.FN_GenerarCodigoTote() AS ProximoCodigo
+FROM Totes
+WHERE Codigo LIKE 'TOTE-%';
+```
+
+### Edge Cases
+
+<Accordion title="What happens when reaching TOTE-9999?">
+The function will generate `TOTE-10000` and beyond, exceeding the 4-digit format. Consider implementing overflow logic or a new naming scheme before reaching this limit.
+</Accordion>
+
+<Accordion title="What if there are gaps in the sequence?">
+The function always returns MAX + 1, so gaps from deleted totes are not reused. For example, if totes 1-10 exist and tote 5 is deleted, the next code will still be TOTE-0011, not TOTE-0005.
+</Accordion>
+
+<Accordion title="Thread safety and concurrency">
+In high-concurrency scenarios, two simultaneous calls might generate the same code. Consider implementing:
+- A unique constraint on the Codigo column (already exists)
+- Transaction-level locking
+- A dedicated sequences table
+- Application-level code generation
+</Accordion>
+
+---
+
+## FN_DiasHastaVencimiento
+
+Calculates the number of days from today until a given expiration date.
+
+### Syntax
+
+```sql
+CREATE FUNCTION FN_DiasHastaVencimiento(@fechaVencimiento DATETIME)
+RETURNS INT
+AS
+BEGIN
+    IF @fechaVencimiento IS NULL 
+        RETURN NULL;
+    
+    RETURN DATEDIFF(day, GETDATE(), @fechaVencimiento);
+END
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `@fechaVencimiento` | DATETIME | Yes | The expiration/due date |
+
+### Returns
+
+- **Type:** INT
+- **Value:** Number of days until expiration
+  - Positive number = days remaining
+  - Negative number = days overdue
+  - NULL = input date was NULL
+
+### Usage Examples
+
+#### Example 1: Calculate Days for a Single Date
+
+```sql
+SELECT dbo.FN_DiasHastaVencimiento('2026-12-31') AS DiasRestantes;
+-- Result: 302 (if today is 2026-03-04)
+```
+
+#### Example 2: Classify Totes by Expiration Status
+
+```sql
+SELECT 
+    Codigo,
+    FechaRetorno,
+    dbo.FN_DiasHastaVencimiento(FechaRetorno) AS DiasHastaRetorno,
+    CASE 
+        WHEN dbo.FN_DiasHastaVencimiento(FechaRetorno) < 0 THEN 'Vencido'
+        WHEN dbo.FN_DiasHastaVencimiento(FechaRetorno) <= 7 THEN 'Crítico'
+        WHEN dbo.FN_DiasHastaVencimiento(FechaRetorno) <= 14 THEN 'Próximo'
+        ELSE 'Normal'
+    END AS EstadoVencimiento
+FROM Totes
+WHERE FechaRetorno IS NOT NULL
+  AND Activo = 1
+ORDER BY DiasHastaRetorno ASC;
+```
+
+#### Example 3: Dashboard Alert Counts
+
+```sql
+SELECT 
+    COUNT(CASE WHEN dbo.FN_DiasHastaVencimiento(FechaRetorno) < 0 THEN 1 END) AS Vencidos,
+    COUNT(CASE WHEN dbo.FN_DiasHastaVencimiento(FechaRetorno) BETWEEN 0 AND 7 THEN 1 END) AS VencenEsta Semana,
+    COUNT(CASE WHEN dbo.FN_DiasHastaVencimiento(FechaRetorno) > 7 THEN 1 END) AS Normales
+FROM Totes
+WHERE Activo = 1 
+  AND Estado = 'CLIENTE'
+  AND FechaRetorno IS NOT NULL;
+```
+
+#### Example 4: Add Computed Column to Table
+
+```sql
+-- Add a computed column that automatically calculates days
+ALTER TABLE Totes 
+ADD DiasHastaRetorno AS dbo.FN_DiasHastaVencimiento(FechaRetorno) PERSISTED;
+
+-- Now you can query it directly
+SELECT Codigo, FechaRetorno, DiasHastaRetorno
+FROM Totes
+WHERE DiasHastaRetorno < 7;
+```
+
+### Use Cases
+
+- **Dashboard KPIs**: Show count of totes expiring soon
+- **Alert Systems**: Trigger notifications for overdue totes
+- **Reporting**: Generate expiration reports
+- **Sorting**: Order totes by urgency
+- **Business Rules**: Implement conditional logic based on time remaining
+
+---
+
+## FN_GenerarCodigoSeguimiento
+
+Generates sequential retail/tracking codes for totes, consolidating old `RETAIL-` and new `COD-` formats.
+
+### Syntax
+
+```sql
+CREATE FUNCTION FN_GenerarCodigoSeguimiento()
+RETURNS NVARCHAR(50)
+AS
+BEGIN
+    DECLARE @codigo NVARCHAR(50);
+    DECLARE @contador INT;
+    
+    -- Find max sequential number from both COD and RETAIL formats
+    SELECT @contador = ISNULL(MAX(val), 0) + 1
+    FROM (
+        SELECT TRY_CAST(SUBSTRING(CodigoBarra, 5, 20) AS INT) as val
+        FROM Totes WHERE CodigoBarra LIKE 'COD-%'
+        UNION ALL
+        SELECT TRY_CAST(SUBSTRING(CodigoBarra, 8, 20) AS INT) as val
+        FROM Totes WHERE CodigoBarra LIKE 'RETAIL-%'
+        UNION ALL
+        SELECT TRY_CAST(SUBSTRING(CodigoRetail, 8, 20) AS INT) as val
+        FROM Totes WHERE CodigoRetail LIKE 'RETAIL-%'
+    ) as t;
+    
+    SET @codigo = 'COD-' + RIGHT('000000' + CAST(@contador AS NVARCHAR), 6);
+    
+    RETURN @codigo;
+END
+```
+
+### Parameters
+
+None - this function takes no parameters.
+
+### Returns
+
+- **Type:** NVARCHAR(50)
+- **Format:** `COD-######` where `######` is a zero-padded 6-digit sequential number
+- **Examples:** `COD-000001`, `COD-000142`, `COD-999999`
+
+### Migration Notes
+
+This function was introduced to consolidate two previous formats:
+- **Old format:** `RETAIL-######` (stored in `CodigoRetail` or `CodigoBarra` columns)
+- **New format:** `COD-######` (stored in `CodigoBarra` column)
+
+The function ensures continuity by checking all three possible locations for existing codes.
+
+### Logic Explanation
+
+1. Queries Totes table for codes in three locations:
+   - `CodigoBarra` with pattern `COD-%`
+   - `CodigoBarra` with pattern `RETAIL-%`
+   - `CodigoRetail` with pattern `RETAIL-%`
+2. Extracts numeric portion from each format
+3. Uses UNION ALL to combine all sequences
+4. Finds maximum value and adds 1
+5. Zero-pads to 6 digits with new `COD-` prefix
+
+### Usage Examples
+
+#### Example 1: Generate New Tracking Code
+
+```sql
+SELECT dbo.FN_GenerarCodigoSeguimiento() AS NuevoCodigoSeguimiento;
+-- Result: COD-000001 (if no tracking codes exist)
+```
+
+#### Example 2: Assign Tracking Code During Fill Operation
+
+```sql
+UPDATE Totes
+SET CodigoBarra = dbo.FN_GenerarCodigoSeguimiento(),
+    FechaModificacion = GETDATE()
+WHERE Id = 1523;
+```
+
+#### Example 3: Bulk Generate Codes for Empty Totes
+
+```sql
+UPDATE Totes
+SET CodigoBarra = dbo.FN_GenerarCodigoSeguimiento()
+WHERE Estado = 'TOTE VACIO'
+  AND CodigoBarra IS NULL;
+```
+
+<Warning>
+This will generate the **same code** for all rows if run as a single UPDATE statement. Use a cursor or application-level loop for unique codes per row.
+</Warning>
+
+#### Example 4: Application Integration (Node.js)
+
+```javascript
+const pool = await sql.connect(config);
+const result = await pool.request()
+    .query('SELECT dbo.FN_GenerarCodigoSeguimiento() AS CodigoSeguimiento');
+
+const nuevoCodigoSeguimiento = result.recordset[0].CodigoSeguimiento;
+
+// Use in subsequent operations
+await pool.request()
+    .input('codigo', sql.NVarChar(50), nuevoCodigoSeguimiento)
+    .input('toteId', sql.Int, toteId)
+    .query('UPDATE Totes SET CodigoBarra = @codigo WHERE Id = @toteId');
+```
+
+### Relationship with CodigoRetail Column
+
+The database schema includes both `CodigoBarra` and `CodigoRetail` columns:
+
+```sql
+SELECT 
+    Codigo,           -- Main tote code (TOTE-####)
+    CodigoBarra,      -- Tracking/barcode (COD-######)
+    CodigoRetail      -- Legacy retail code (RETAIL-######)
+FROM Totes;
+```
+
+**Best Practice:** Use `CodigoBarra` for all new implementations with `COD-` prefix. The `CodigoRetail` column is maintained for backward compatibility.
+
+---
+
+## Function Performance Considerations
+
+### Indexing Recommendations
+
+To optimize function performance, ensure proper indexes exist:
+
+```sql
+-- For FN_GenerarCodigoTote
+CREATE NONCLUSTERED INDEX IX_Totes_Codigo_Pattern 
+ON Totes(Codigo) 
+WHERE Codigo LIKE 'TOTE-%';
+
+-- For FN_GenerarCodigoSeguimiento
+CREATE NONCLUSTERED INDEX IX_Totes_CodigoBarra 
+ON Totes(CodigoBarra);
+
+CREATE NONCLUSTERED INDEX IX_Totes_CodigoRetail 
+ON Totes(CodigoRetail);
+
+-- For FN_DiasHastaVencimiento queries
+CREATE NONCLUSTERED INDEX IX_Totes_FechaRetorno 
+ON Totes(FechaRetorno) 
+INCLUDE (Codigo, Cliente, Estado);
+```
+
+### Execution Plan Analysis
+
+```sql
+-- Enable actual execution plan (SSMS)
+SET STATISTICS IO ON;
+SET STATISTICS TIME ON;
+
+-- Test function performance
+SELECT dbo.FN_GenerarCodigoTote();
+SELECT dbo.FN_GenerarCodigoSeguimiento();
+
+SET STATISTICS IO OFF;
+SET STATISTICS TIME OFF;
+```
+
+### Concurrency Considerations
+
+<Warning>
+**Race Condition Warning:** Code generation functions are susceptible to race conditions in multi-user environments.
+</Warning>
+
+To handle concurrent code generation:
+
+1. **Use Transactions:**
+```sql
+BEGIN TRANSACTION;
+    DECLARE @nuevoCodigo NVARCHAR(20) = dbo.FN_GenerarCodigoTote();
+    INSERT INTO Totes (Codigo, Estado) VALUES (@nuevoCodigo, 'TOTE VACIO');
+COMMIT TRANSACTION;
+```
+
+2. **Implement Retry Logic:**
+```javascript
+async function crearToteConReintento(maxIntentos = 3) {
+    for (let i = 0; i < maxIntentos; i++) {
+        try {
+            await pool.request().execute('SP_CrearTote');
+            return;
+        } catch (error) {
+            if (error.message.includes('duplicate') && i < maxIntentos - 1) {
+                await new Promise(resolve => setTimeout(resolve, 100 * (i + 1)));
+                continue;
+            }
+            throw error;
+        }
+    }
+}
+```
+
+3. **Use Sequences (SQL Server 2012+):**
+```sql
+CREATE SEQUENCE ToteCodigoSeq
+    START WITH 1
+    INCREMENT BY 1
+    MINVALUE 1
+    MAXVALUE 9999
+    CYCLE;
+
+-- Then in function:
+DECLARE @secuencia INT = NEXT VALUE FOR ToteCodigoSeq;
+RETURN 'TOTE-' + RIGHT('0000' + CAST(@secuencia AS NVARCHAR), 4);
+```
+
+## Testing Functions
+
+### Unit Test Examples
+
+```sql
+-- Test 1: FN_GenerarCodigoTote format
+DECLARE @codigo NVARCHAR(20) = dbo.FN_GenerarCodigoTote();
+IF @codigo NOT LIKE 'TOTE-[0-9][0-9][0-9][0-9]'
+    RAISERROR('Invalid code format generated', 16, 1);
+ELSE
+    PRINT '✓ FN_GenerarCodigoTote format valid';
+
+-- Test 2: FN_DiasHastaVencimiento with NULL
+IF dbo.FN_DiasHastaVencimiento(NULL) IS NOT NULL
+    RAISERROR('Function should return NULL for NULL input', 16, 1);
+ELSE
+    PRINT '✓ FN_DiasHastaVencimiento handles NULL correctly';
+
+-- Test 3: FN_DiasHastaVencimiento calculation
+DECLARE @dias INT = dbo.FN_DiasHastaVencimiento(DATEADD(DAY, 10, GETDATE()));
+IF @dias <> 10
+    RAISERROR('Incorrect days calculation', 16, 1);
+ELSE
+    PRINT '✓ FN_DiasHastaVencimiento calculates correctly';
+
+-- Test 4: FN_GenerarCodigoSeguimiento format
+DECLARE @codigoSeg NVARCHAR(50) = dbo.FN_GenerarCodigoSeguimiento();
+IF @codigoSeg NOT LIKE 'COD-[0-9][0-9][0-9][0-9][0-9][0-9]'
+    RAISERROR('Invalid tracking code format', 16, 1);
+ELSE
+    PRINT '✓ FN_GenerarCodigoSeguimiento format valid';
+```
+
+## Migration from Legacy Functions
+
+If you had a previous version of `FN_GenerarCodigoRetail`, migrate to `FN_GenerarCodigoSeguimiento`:
+
+```sql
+-- Update all references
+UPDATE application_code SET function_name = 'FN_GenerarCodigoSeguimiento'
+WHERE function_name = 'FN_GenerarCodigoRetail';
+
+-- Update existing RETAIL codes to COD format (optional)
+UPDATE Totes
+SET CodigoBarra = 'COD-' + SUBSTRING(CodigoBarra, 8, 6)
+WHERE CodigoBarra LIKE 'RETAIL-%';
+```
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Stored Procedures" icon="database" href="/database/stored-procedures">
+    See how functions are used within stored procedures
+  </Card>
+  <Card title="Table Definitions" icon="table" href="/database/tables">
+    Review table structures that functions operate on
+  </Card>
+</CardGroup>

@@ -1,0 +1,824 @@
+---
+title: Installation guide
+description: Comprehensive installation instructions for deploying DitzlerTotes in development and production environments
+---
+
+This guide provides detailed instructions for installing and configuring DitzlerTotes for both development and production environments.
+
+## System requirements
+
+### Minimum requirements
+
+- **Operating System**: Windows Server 2016+, Linux (Ubuntu 20.04+), or macOS 10.15+
+- **Node.js**: Version 18.0.0 or higher (LTS recommended)
+- **SQL Server**: 2016 or higher (Express, Standard, or Enterprise)
+- **RAM**: 4 GB minimum (8 GB recommended)
+- **Storage**: 2 GB free space (more for production with large datasets)
+- **Network**: Stable network connection for database communication
+
+### Recommended for production
+
+- **Node.js**: Latest LTS version (20.x or higher)
+- **SQL Server**: Standard or Enterprise edition with backup capabilities
+- **RAM**: 16 GB or more
+- **CPU**: Multi-core processor (4+ cores)
+- **Storage**: SSD with 20+ GB free space
+- **Reverse proxy**: NGINX or Apache for SSL termination
+
+## Installation steps
+
+<Steps>
+
+<Step title="Install Node.js">
+
+Download and install Node.js from the official website:
+
+<CodeGroup>
+
+```bash Ubuntu/Debian
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+```bash macOS (Homebrew)
+brew install node@20
+```
+
+```powershell Windows
+# Download installer from https://nodejs.org
+# Or use Chocolatey:
+choco install nodejs-lts
+```
+
+</CodeGroup>
+
+Verify the installation:
+
+```bash
+node --version  # Should show v18.0.0 or higher
+npm --version   # Should show 9.0.0 or higher
+```
+
+</Step>
+
+<Step title="Install SQL Server">
+
+Install Microsoft SQL Server based on your operating system:
+
+<Tabs>
+  <Tab title="Windows">
+    Download SQL Server 2019 or later from [Microsoft's website](https://www.microsoft.com/sql-server/sql-server-downloads).
+    
+    For development, SQL Server Express is sufficient:
+    - Run the installer
+    - Choose "Basic" installation
+    - Note the server name (usually `localhost` or `.\SQLEXPRESS`)
+    - Install SQL Server Management Studio (SSMS)
+  </Tab>
+  
+  <Tab title="Linux">
+    ```bash Ubuntu
+    # Import Microsoft GPG key
+    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+    
+    # Add repository
+    sudo add-apt-repository "$(wget -qO- https://packages.microsoft.com/config/ubuntu/20.04/mssql-server-2019.list)"
+    
+    # Install SQL Server
+    sudo apt-get update
+    sudo apt-get install -y mssql-server
+    
+    # Run setup
+    sudo /opt/mssql/bin/mssql-conf setup
+    
+    # Install command-line tools
+    sudo apt-get install -y mssql-tools unixodbc-dev
+    ```
+  </Tab>
+  
+  <Tab title="Docker">
+    ```bash Docker
+    # Pull SQL Server image
+    docker pull mcr.microsoft.com/mssql/server:2019-latest
+    
+    # Run container
+    docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=YourStrong@Passw0rd" \
+      -p 1433:1433 --name sqlserver \
+      -d mcr.microsoft.com/mssql/server:2019-latest
+    ```
+  </Tab>
+</Tabs>
+
+</Step>
+
+<Step title="Clone the repository">
+
+Clone the DitzlerTotes repository to your server:
+
+```bash
+git clone <repository-url>
+cd DitzlerTotesDB
+```
+
+If you're deploying a specific version, check out the appropriate tag:
+
+```bash
+# List available versions
+git tag
+
+# Check out version 1.4.0
+git checkout v1.4.0
+```
+
+</Step>
+
+<Step title="Install Node.js dependencies">
+
+Install all required packages:
+
+```bash
+npm install
+```
+
+For production, use clean install to ensure reproducible builds:
+
+```bash
+npm ci --production
+```
+
+This installs the following core dependencies:
+
+| Package | Version | Purpose |
+|---------|---------|----------|
+| express | ^5.1.0 | Web application framework |
+| mssql | ^11.0.1 | SQL Server client |
+| bcrypt | ^6.0.0 | Password hashing |
+| helmet | ^8.1.0 | HTTP security headers |
+| express-rate-limit | ^8.2.1 | Rate limiting middleware |
+| express-session | ^1.18.2 | Session management |
+| dotenv | ^17.2.3 | Environment configuration |
+| jsonwebtoken | ^9.0.3 | JWT token handling |
+
+</Step>
+
+<Step title="Configure environment variables">
+
+Create your environment configuration file:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your specific configuration:
+
+```env .env
+# Database Configuration
+DB_USER=your_database_user
+DB_PASSWORD=your_database_password
+DB_DATABASE=Ditzler
+DB_SERVER=localhost
+DB_PORT=1433
+
+# Server Configuration
+PORT=3003
+NODE_ENV=production
+
+# Session Security (CHANGE THIS!)
+SESSION_SECRET=change-this-to-a-random-secret-key-in-production
+```
+
+<Warning>
+**Critical security steps:**
+1. Never use the example `SESSION_SECRET` in production
+2. Never commit your `.env` file to version control
+3. Use strong database passwords (minimum 12 characters with mixed case, numbers, and symbols)
+4. Restrict database user permissions to only what's needed
+</Warning>
+
+### Generate a secure session secret
+
+Use one of these methods to generate a cryptographically secure session secret:
+
+<CodeGroup>
+
+```bash Node.js
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+```bash OpenSSL
+openssl rand -hex 64
+```
+
+```powershell PowerShell
+[guid]::NewGuid().ToString() + [guid]::NewGuid().ToString()
+```
+
+```python Python
+import secrets
+print(secrets.token_hex(64))
+```
+
+</CodeGroup>
+
+Copy the output and update the `SESSION_SECRET` in your `.env` file.
+
+</Step>
+
+<Step title="Create the database">
+
+Connect to SQL Server and create the database:
+
+```sql
+CREATE DATABASE Ditzler;
+GO
+
+USE Ditzler;
+GO
+```
+
+Create a dedicated database user (recommended for production):
+
+```sql
+-- Create login
+CREATE LOGIN ditzler_app WITH PASSWORD = 'YourSecurePassword123!';
+GO
+
+-- Create user in Ditzler database
+USE Ditzler;
+CREATE USER ditzler_app FOR LOGIN ditzler_app;
+GO
+
+-- Grant necessary permissions
+ALTER ROLE db_datareader ADD MEMBER ditzler_app;
+ALTER ROLE db_datawriter ADD MEMBER ditzler_app;
+ALTER ROLE db_ddladmin ADD MEMBER ditzler_app;
+GRANT EXECUTE TO ditzler_app;
+GO
+```
+
+Update your `.env` file with these credentials:
+
+```env
+DB_USER=ditzler_app
+DB_PASSWORD=YourSecurePassword123!
+```
+
+</Step>
+
+<Step title="Execute database scripts">
+
+You have two options for setting up the database schema:
+
+**Option 1: Use the master installation script (recommended)**
+
+Open SQL Server Management Studio (SSMS) or Azure Data Studio, connect to your server, and execute:
+
+```sql
+-- File: database/00_Master_Install.sql
+-- This script creates all tables, indexes, stored procedures, and functions
+```
+
+**Option 2: Execute scripts sequentially**
+
+Run each script in order:
+
+```
+1. database/01_Usuarios_Table.sql        # User accounts table
+2. database/02_Clientes_Table.sql        # Clients table
+3. database/03_Totes_Table.sql           # Totes container table
+4. database/04_Eventos_Table.sql         # Audit events table
+5. database/05_Update_User_Roles.sql     # Role system updates
+6. database/06_Add_Llenado_Role.sql      # Filling operator role
+7. database/07_Multi_Role_Support.sql    # Multi-role support
+8. database/08_User_Preferences.sql      # User preferences
+9. database/09_Productos_Ubicaciones.sql # Products and locations
+```
+
+This creates:
+- **7 tables**: Usuarios, Clientes, Totes, Llenados_Totes, Eventos, Productos, Ubicaciones
+- **18+ stored procedures** for CRUD operations
+- **3 database functions** for validation and code generation
+- **39+ indexes** for query performance
+- **Default data** including admin user accounts
+
+</Step>
+
+<Step title="Verify database setup">
+
+Check that all tables were created successfully:
+
+```sql
+USE Ditzler;
+GO
+
+SELECT 
+    t.name AS TableName,
+    COUNT(c.column_id) AS ColumnCount
+FROM sys.tables t
+INNER JOIN sys.columns c ON t.object_id = c.object_id
+WHERE t.type = 'U'
+GROUP BY t.name
+ORDER BY t.name;
+```
+
+You should see:
+- Usuarios
+- Clientes
+- Totes
+- Llenados_Totes
+- Eventos
+- Productos
+- Ubicaciones
+
+Verify stored procedures:
+
+```sql
+SELECT name, type_desc
+FROM sys.procedures
+WHERE type = 'P'
+ORDER BY name;
+```
+
+Verify functions:
+
+```sql
+SELECT name, type_desc
+FROM sys.objects
+WHERE type IN ('FN', 'IF', 'TF')
+ORDER BY name;
+```
+
+</Step>
+
+<Step title="Configure the application">
+
+Review and adjust the frontend configuration in `js/config.js`:
+
+```javascript js/config.js
+const CONFIG = {
+  SESSION: {
+    STORAGE_KEY: 'loggedInAdmin',
+    TIMEOUT: 8 * 60 * 60 * 1000  // 8 hours (adjust as needed)
+  },
+  API: {
+    BASE_URL: '',  // Leave empty for same-origin, or set to your API URL
+    TIMEOUT: 10000 // API request timeout in milliseconds
+  },
+  UI: {
+    ITEMS_PER_PAGE: 50,        // Number of items in paginated lists
+    REFRESH_INTERVAL: 30000    // Dashboard refresh interval (30 seconds)
+  }
+};
+```
+
+For production, consider:
+- Adjusting `SESSION.TIMEOUT` based on security requirements
+- Setting `API.BASE_URL` if frontend and backend are on different domains
+- Tuning `UI.ITEMS_PER_PAGE` based on network speed and data volume
+
+</Step>
+
+<Step title="Test the installation">
+
+Start the server:
+
+```bash
+npm start
+```
+
+You should see:
+
+```
+🚀 Servidor DitzlerTotesDB ejecutándose en http://localhost:3003
+📦 Arquitectura modular activa (Fase 1 completada)
+📁 Módulos migrados: Auth, Totes, Users, Clients, Products, Locations
+```
+
+Test the database connection:
+
+```bash
+curl http://localhost:3003/api/test-db-connection
+```
+
+Expected response:
+```json
+{
+  "success": true,
+  "message": "Database connection successful"
+}
+```
+
+Test the audit system:
+
+```bash
+curl http://localhost:3003/api/test-audit
+```
+
+Test authentication:
+
+```bash
+curl -X POST http://localhost:3003/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@ditzler.com", "password": "admin123"}'
+```
+
+</Step>
+
+</Steps>
+
+## Production deployment
+
+### Using PM2 (recommended)
+
+PM2 is a production process manager for Node.js applications:
+
+```bash
+# Install PM2 globally
+npm install -g pm2
+
+# Start the application
+pm2 start server.js --name ditzlertotes
+
+# Configure auto-restart on system boot
+pm2 startup
+pm2 save
+
+# Monitor the application
+pm2 monit
+
+# View logs
+pm2 logs ditzlertotes
+
+# Restart after code updates
+pm2 restart ditzlertotes
+```
+
+### Using systemd (Linux)
+
+Create a systemd service file at `/etc/systemd/system/ditzlertotes.service`:
+
+```ini
+[Unit]
+Description=DitzlerTotes Application
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/ditzlertotes
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+Environment=NODE_ENV=production
+EnvironmentFile=/var/www/ditzlertotes/.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable ditzlertotes
+sudo systemctl start ditzlertotes
+sudo systemctl status ditzlertotes
+```
+
+### Using Docker
+
+Create a `Dockerfile` in the project root:
+
+```dockerfile Dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --production
+
+COPY . .
+
+EXPOSE 3003
+
+CMD ["node", "server.js"]
+```
+
+Create `docker-compose.yml`:
+
+```yaml docker-compose.yml
+version: '3.8'
+
+services:
+  ditzlertotes:
+    build: .
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      - sqlserver
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourStrong@Passw0rd
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqldata:/var/opt/mssql
+
+volumes:
+  sqldata:
+```
+
+Deploy with Docker Compose:
+
+```bash
+docker-compose up -d
+```
+
+## Reverse proxy configuration
+
+### NGINX
+
+Create `/etc/nginx/sites-available/ditzlertotes`:
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://localhost:3003;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+Enable the site:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/ditzlertotes /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### SSL with Let's Encrypt
+
+```bash
+# Install certbot
+sudo apt-get install certbot python3-certbot-nginx
+
+# Obtain certificate
+sudo certbot --nginx -d your-domain.com
+
+# Auto-renewal
+sudo certbot renew --dry-run
+```
+
+## Security hardening
+
+<Steps>
+
+<Step title="Change default credentials">
+
+Immediately after installation, change the default user passwords:
+
+```sql
+USE Ditzler;
+GO
+
+-- Update admin password (hash generated by application)
+UPDATE Usuarios 
+SET Password = '<bcrypt-hash-of-new-password>'
+WHERE Email = 'admin@ditzler.com';
+GO
+```
+
+Or use the admin interface to change passwords.
+
+</Step>
+
+<Step title="Configure firewall">
+
+```bash
+# Allow only necessary ports
+sudo ufw allow 22/tcp   # SSH
+sudo ufw allow 80/tcp   # HTTP
+sudo ufw allow 443/tcp  # HTTPS
+sudo ufw enable
+```
+
+</Step>
+
+<Step title="Enable rate limiting">
+
+The application includes rate limiting via express-rate-limit. Adjust limits in `server.js` if needed:
+
+```javascript server.js
+const rateLimit = require('express-rate-limit');
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
+
+app.use('/api/', limiter);
+```
+
+</Step>
+
+<Step title="Configure SQL Server security">
+
+```sql
+-- Enable encrypted connections
+EXEC sp_configure 'remote access', 0;
+RECONFIGURE;
+GO
+
+-- Set strong password policy
+ALTER LOGIN ditzler_app WITH CHECK_POLICY = ON;
+GO
+```
+
+</Step>
+
+</Steps>
+
+## Monitoring and maintenance
+
+### Database maintenance
+
+Set up regular maintenance tasks:
+
+```sql
+-- Clean old audit events (older than 365 days)
+EXEC SP_LimpiarEventosAntiguos @diasAntiguedad = 365;
+GO
+
+-- Check database integrity
+DBCC CHECKDB('Ditzler');
+GO
+
+-- Update statistics for performance
+EXEC sp_updatestats;
+GO
+```
+
+### Application monitoring
+
+Recommended metrics to monitor:
+
+- Server CPU and memory usage
+- API response times
+- Database connection pool status
+- Concurrent active sessions
+- Audit log growth rate
+- Error rates by endpoint
+
+### Backup strategy
+
+```sql
+-- Full backup
+BACKUP DATABASE Ditzler 
+TO DISK = '/var/backups/ditzler_full.bak'
+WITH FORMAT, INIT, COMPRESSION;
+GO
+
+-- Transaction log backup
+BACKUP LOG Ditzler
+TO DISK = '/var/backups/ditzler_log.trn'
+WITH COMPRESSION;
+GO
+```
+
+Schedule automated backups using SQL Server Agent or cron jobs.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Module not found errors">
+    Run `npm install` again to ensure all dependencies are installed. Check that your Node.js version is 18 or higher with `node --version`.
+  </Accordion>
+  
+  <Accordion title="Database connection timeout">
+    Verify:
+    - SQL Server is running: `systemctl status mssql-server` (Linux) or check Services (Windows)
+    - Firewall allows port 1433
+    - Credentials in `.env` are correct
+    - Database name matches (default: Ditzler)
+    
+    Test connection manually:
+    ```bash
+    sqlcmd -S localhost -U ditzler_app -P YourPassword -d Ditzler -Q "SELECT @@VERSION"
+    ```
+  </Accordion>
+  
+  <Accordion title="Permission denied errors">
+    Ensure the database user has sufficient permissions:
+    ```sql
+    USE Ditzler;
+    EXEC sp_helprotect;
+    ```
+    
+    Grant additional permissions if needed:
+    ```sql
+    GRANT EXECUTE TO ditzler_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON SCHEMA::dbo TO ditzler_app;
+    ```
+  </Accordion>
+  
+  <Accordion title="Port already in use">
+    Check what's using port 3003:
+    ```bash
+    # Linux/macOS
+    lsof -i :3003
+    
+    # Windows
+    netstat -ano | findstr :3003
+    ```
+    
+    Kill the process or change the PORT in `.env`.
+  </Accordion>
+  
+  <Accordion title="Session issues after deployment">
+    Ensure `SESSION_SECRET` is set correctly in production `.env`. Sessions won't persist if the secret changes. For load-balanced deployments, consider using a session store like Redis.
+  </Accordion>
+</AccordionGroup>
+
+## Performance tuning
+
+### Database indexes
+
+The installation scripts create 39+ indexes automatically. Monitor index usage:
+
+```sql
+SELECT 
+    OBJECT_NAME(s.object_id) AS TableName,
+    i.name AS IndexName,
+    s.user_seeks,
+    s.user_scans,
+    s.user_lookups,
+    s.user_updates
+FROM sys.dm_db_index_usage_stats s
+INNER JOIN sys.indexes i ON s.object_id = i.object_id AND s.index_id = i.index_id
+WHERE database_id = DB_ID('Ditzler')
+ORDER BY s.user_seeks + s.user_scans + s.user_lookups DESC;
+```
+
+### Node.js optimization
+
+For production, set appropriate environment variables:
+
+```bash
+# Increase max memory for Node.js
+export NODE_OPTIONS="--max-old-space-size=4096"
+
+# Enable production mode
+export NODE_ENV=production
+```
+
+## Updating DitzlerTotes
+
+To update to a new version:
+
+```bash
+# Backup your database first!
+# Stop the application
+pm2 stop ditzlertotes
+
+# Pull latest changes
+git fetch
+git checkout <version-tag>
+
+# Update dependencies
+npm install
+
+# Run any new database migrations
+# Check database/ folder for new scripts
+
+# Restart application
+pm2 restart ditzlertotes
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Try DitzlerTotes with the quick start guide
+  </Card>
+  <Card title="API reference" icon="code" href="/api">
+    Explore the REST API endpoints
+  </Card>
+</CardGroup>

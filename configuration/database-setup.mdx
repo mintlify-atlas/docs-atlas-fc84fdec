@@ -1,0 +1,551 @@
+---
+title: Database Setup
+description: Configure Microsoft SQL Server and initialize the DitzlerTotes database schema
+---
+
+## Overview
+
+DitzlerTotes uses Microsoft SQL Server 2016 or higher to store all application data. This guide covers installation, configuration, and schema setup.
+
+## Prerequisites
+
+<CardGroup cols={2}>
+  <Card title="SQL Server" icon="database">
+    Microsoft SQL Server 2016 or higher
+  </Card>
+  
+  <Card title="Node.js Driver" icon="node">
+    mssql package (v11.0.1 or higher)
+  </Card>
+</CardGroup>
+
+## Connection Configuration
+
+### Database Module
+
+The application uses a centralized database configuration module located at `config/database.js`:
+
+```javascript config/database.js
+const sql = require('mssql');
+
+const sqlConfig = {
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE,
+    server: process.env.DB_SERVER,
+    port: parseInt(process.env.DB_PORT),
+    options: {
+        encrypt: false,
+        trustServerCertificate: true,
+        enableArithAbort: true,
+        connectTimeout: 60000,
+        requestTimeout: 60000
+    },
+    pool: {
+        max: 10,
+        min: 0,
+        idleTimeoutMillis: 30000
+    }
+};
+```
+
+### Connection Options Explained
+
+<ParamField path="options.encrypt" type="boolean" default="false">
+  Enable/disable SSL encryption for database connections
+  
+  - Set to `true` for Azure SQL Database
+  - Set to `false` for local development
+</ParamField>
+
+<ParamField path="options.trustServerCertificate" type="boolean" default="true">
+  Trust the server's SSL certificate without validation
+  
+  <Warning>Set to `false` in production with proper SSL certificates</Warning>
+</ParamField>
+
+<ParamField path="options.enableArithAbort" type="boolean" default="true">
+  Required for indexed views and computed columns
+</ParamField>
+
+<ParamField path="options.connectTimeout" type="number" default="60000">
+  Connection timeout in milliseconds (60 seconds)
+</ParamField>
+
+<ParamField path="options.requestTimeout" type="number" default="60000">
+  Query execution timeout in milliseconds (60 seconds)
+</ParamField>
+
+### Connection Pool Configuration
+
+<ParamField path="pool.max" type="number" default="10">
+  Maximum number of connections in the pool
+  
+  Adjust based on your application's concurrent load.
+</ParamField>
+
+<ParamField path="pool.min" type="number" default="0">
+  Minimum number of connections to maintain
+  
+  Setting to 0 allows the pool to scale down when idle.
+</ParamField>
+
+<ParamField path="pool.idleTimeoutMillis" type="number" default="30000">
+  Close idle connections after 30 seconds
+</ParamField>
+
+## Database Schema
+
+### Core Tables
+
+The DitzlerTotes database consists of 7 main tables:
+
+<AccordionGroup>
+  <Accordion title="USUARIOS - User Management" icon="users">
+    Stores user accounts, roles, and preferences.
+    
+    **Key Columns:**
+    - `Id` (PK) - Unique user identifier
+    - `Email` (UNIQUE) - Login credential
+    - `Password` - Bcrypt hashed password
+    - `Rol` - Comma-separated roles (supports multi-role)
+    - `Preferencias` (NVARCHAR(MAX)) - JSON-encoded user preferences
+    - `Estado` - Activo/Inactivo
+    
+    **Indexes:** 4 indexes including unique email constraint
+  </Accordion>
+  
+  <Accordion title="CLIENTES - Client Management" icon="building">
+    Manages customer/client information.
+    
+    **Key Columns:**
+    - `id` (PK) - Client identifier
+    - `nombre_empresa` (UNIQUE) - Company name
+    - `email` (UNIQUE) - Contact email
+    - `contacto_principal` - Primary contact name
+    - `telefono`, `direccion`, `ciudad`, `pais` - Contact details
+    - `estado` - Activo/Inactivo
+    - `notas` (NVARCHAR(MAX)) - Additional notes
+    
+    **Indexes:** 6 indexes for efficient queries
+  </Accordion>
+  
+  <Accordion title="TOTES - Container Management" icon="box">
+    Tracks containers with full lifecycle management.
+    
+    **Key Columns:**
+    - `Id` (PK) - Tote identifier
+    - `Codigo` (UNIQUE) - Tote barcode/RFID
+    - `Estado` - Disponible, En Uso, Mantenimiento, Fuera de Servicio
+    - `Ubicacion` - Current location
+    - `Cliente` - Assigned client
+    - `Producto` - Product type
+    - `FechaEnvasado`, `FechaVencimiento`, `FechaDespacho` - Lifecycle dates
+    - `Alerta` - Alert level (Baja/Media/Alta/Crítica)
+    - `Peso` - Weight in kilograms
+    - `Activo` - Soft delete flag
+    
+    **Indexes:** 11 indexes for high-performance queries
+  </Accordion>
+  
+  <Accordion title="LLENADOS_TOTES - Fill History" icon="fill-drip">
+    Records all tote filling operations.
+    
+    **Key Columns:**
+    - `Id` (PK) - Fill record identifier
+    - `RFID_Tag` - Tote identifier
+    - `Peso_Bruto`, `Peso_Neto`, `Tara` - Weight measurements
+    - `Producto`, `Lote` - Product details
+    - `Usuario`, `Nombre_Operador` - Who performed the fill
+    - `Balanza` - Scale number
+    - `Fecha_Registro` - Timestamp
+    
+    **Indexes:** 5 indexes for history queries
+  </Accordion>
+  
+  <Accordion title="EVENTOS - Audit Trail" icon="list-timeline">
+    Complete audit log of all system events.
+    
+    **Key Columns:**
+    - `Id` (PK) - Event identifier
+    - `ToteId` (FK) - Related tote
+    - `TipEvento`, `Descripcion` - Event details
+    - `Usuario` - User who triggered event
+    - `FechaEvento` - Event timestamp
+    - `Severidad` - Debug/Info/Warning/Error/Critical
+    - `Modulo`, `Accion` - Event categorization
+    - `IpAddress`, `UserAgent` - Client information
+    - `DatosAdicionales` (NVARCHAR(MAX)) - JSON event data
+    
+    **Indexes:** 10 indexes for fast audit queries
+  </Accordion>
+  
+  <Accordion title="PRODUCTOS - Product Catalog" icon="tag">
+    Manages product definitions.
+    
+    **Key Columns:**
+    - `Id` (PK) - Product identifier
+    - `Nombre` (UNIQUE) - Product name
+    - `Descripcion` - Product description
+    - `Codigo` - Product code/SKU
+    - `Categoria` - Dulces, Aceites, Jarabes, Esencias
+    - `Estado` - Activo/Inactivo
+    
+    **Indexes:** 4 indexes
+  </Accordion>
+  
+  <Accordion title="UBICACIONES - Location Management" icon="map-pin">
+    Defines storage locations and zones.
+    
+    **Key Columns:**
+    - `Id` (PK) - Location identifier
+    - `Nombre` (UNIQUE) - Location name
+    - `Descripcion` - Location description
+    - `Codigo` - Location code
+    - `Tipo` - Almacén, Producción, Despacho, Mantenimiento
+    - `Capacidad` - Maximum tote capacity
+    - `Estado` - Activo/Inactivo
+    
+    **Indexes:** 4 indexes
+  </Accordion>
+</AccordionGroup>
+
+## Database Installation
+
+<Steps>
+  <Step title="Create the database">
+    Connect to SQL Server and create the database:
+    
+    ```sql
+    CREATE DATABASE Ditzler;
+    GO
+    
+    USE Ditzler;
+    GO
+    ```
+  </Step>
+  
+  <Step title="Run migration scripts">
+    Execute the SQL migration scripts in order:
+    
+    <Info>Scripts should be located in the `database/` directory</Info>
+    
+    1. `01_Usuarios_Table.sql` - User management
+    2. `02_Clientes_Table.sql` - Client management
+    3. `03_Totes_Table.sql` - Tote tracking
+    4. `04_Eventos_Table.sql` - Audit system
+    5. `05_Update_User_Roles.sql` - Role updates
+    6. `06_Add_Llenado_Role.sql` - Filling operator role
+    7. `07_Multi_Role_Support.sql` - Multi-role support
+    8. `08_User_Preferences.sql` - User preferences
+    9. `09_Productos_Ubicaciones.sql` - Products and locations
+    
+    Or use the master installation script:
+    ```sql
+    -- Execute 00_Master_Install.sql
+    ```
+  </Step>
+  
+  <Step title="Create database user">
+    Create a dedicated user for the application:
+    
+    ```sql
+    CREATE LOGIN ditzler_app WITH PASSWORD = 'SecurePassword123!';
+    GO
+    
+    USE Ditzler;
+    GO
+    
+    CREATE USER ditzler_app FOR LOGIN ditzler_app;
+    GO
+    
+    -- Grant necessary permissions
+    ALTER ROLE db_datareader ADD MEMBER ditzler_app;
+    ALTER ROLE db_datawriter ADD MEMBER ditzler_app;
+    GRANT EXECUTE TO ditzler_app;
+    GO
+    ```
+  </Step>
+  
+  <Step title="Verify installation">
+    Check that all tables were created:
+    
+    ```sql
+    SELECT TABLE_NAME 
+    FROM INFORMATION_SCHEMA.TABLES 
+    WHERE TABLE_TYPE = 'BASE TABLE'
+    ORDER BY TABLE_NAME;
+    ```
+    
+    Expected output:
+    - CLIENTES
+    - EVENTOS
+    - LLENADOS_TOTES
+    - PRODUCTOS
+    - TOTES
+    - UBICACIONES
+    - USUARIOS
+  </Step>
+</Steps>
+
+## Connection Pool Management
+
+The database module provides utility functions for connection management:
+
+### Get Shared Connection
+
+```javascript
+const { getPool } = require('./config/database');
+
+// Get or create shared connection pool
+const pool = await getPool();
+const result = await pool.request()
+    .query('SELECT * FROM TOTES');
+```
+
+<Info>Use `getPool()` for most operations to reuse connections</Info>
+
+### Create Dedicated Connection
+
+```javascript
+const { createConnection, closeConnection } = require('./config/database');
+
+// Create dedicated connection for transactions
+const pool = await createConnection();
+try {
+    const transaction = pool.transaction();
+    await transaction.begin();
+    // ... perform operations
+    await transaction.commit();
+} finally {
+    await closeConnection(pool);
+}
+```
+
+<Warning>Always close dedicated connections in a `finally` block</Warning>
+
+### Safe Connection Cleanup
+
+```javascript
+const { safeCloseConnection } = require('./config/database');
+
+let pool = null;
+try {
+    pool = await createConnection();
+    // ... operations
+} finally {
+    await safeCloseConnection(pool); // Safe even if pool is null
+}
+```
+
+## Database Functions
+
+The schema includes utility functions:
+
+<CodeGroup>
+```sql FN_ValidarEmail
+-- Validate email format
+SELECT dbo.FN_ValidarEmail('user@example.com') AS IsValid;
+-- Returns: 1 (valid) or 0 (invalid)
+```
+
+```sql FN_GenerarCodigoTote
+-- Generate unique tote code
+SELECT dbo.FN_GenerarCodigoTote() AS NewCode;
+-- Returns: 'TOTE-0001', 'TOTE-0002', etc.
+```
+
+```sql FN_DiasHastaVencimiento
+-- Calculate days until expiration
+SELECT dbo.FN_DiasHastaVencimiento('2024-12-31') AS DaysRemaining;
+```
+</CodeGroup>
+
+## Performance Optimization
+
+### Index Strategy
+
+The database uses 39+ indexes across all tables:
+
+- **Clustered indexes** on all primary keys
+- **Unique indexes** on email, codigo, nombre fields
+- **Non-clustered indexes** on frequently queried columns
+- **Composite indexes** for complex queries
+
+### Query Optimization Tips
+
+<AccordionGroup>
+  <Accordion title="Use parameterized queries">
+    Always use parameterized queries to prevent SQL injection and improve plan caching:
+    
+    ```javascript
+    // ✅ Good
+    await pool.request()
+        .input('email', sql.NVarChar, userEmail)
+        .query('SELECT * FROM Usuarios WHERE Email = @email');
+    
+    // ❌ Bad
+    await pool.request()
+        .query(`SELECT * FROM Usuarios WHERE Email = '${userEmail}'`);
+    ```
+  </Accordion>
+  
+  <Accordion title="Leverage stored procedures">
+    The database includes 18+ stored procedures for common operations:
+    
+    ```javascript
+    await pool.request()
+        .input('userId', sql.Int, userId)
+        .execute('SP_GetUserPreferences');
+    ```
+  </Accordion>
+  
+  <Accordion title="Use connection pooling">
+    Always use `getPool()` instead of creating new connections:
+    
+    ```javascript
+    // ✅ Good - Reuses connections
+    const pool = await getPool();
+    
+    // ❌ Bad - Creates new connection every time
+    const pool = await createConnection();
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Maintenance Tasks
+
+### Database Health Check
+
+```sql
+-- Check database integrity
+DBCC CHECKDB('Ditzler');
+
+-- Check table integrity
+DBCC CHECKTABLE('TOTES');
+
+-- Update statistics
+EXEC sp_updatestats;
+```
+
+### Clean Old Events
+
+The audit log can grow large over time. Clean old events periodically:
+
+```sql
+-- Delete events older than 365 days
+EXEC SP_LimpiarEventosAntiguos @diasAntiguedad = 365;
+```
+
+### Backup Recommendations
+
+<Steps>
+  <Step title="Daily full backups">
+    ```sql
+    BACKUP DATABASE Ditzler 
+    TO DISK = 'C:\Backups\Ditzler_Full.bak'
+    WITH FORMAT, NAME = 'Ditzler Full Backup';
+    ```
+  </Step>
+  
+  <Step title="Hourly transaction log backups">
+    ```sql
+    BACKUP LOG Ditzler
+    TO DISK = 'C:\Backups\Ditzler_Log.trn'
+    WITH NAME = 'Ditzler Log Backup';
+    ```
+  </Step>
+  
+  <Step title="Test restore procedures">
+    Regularly test your backup restoration process to ensure data recovery capabilities.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Connection timeout errors
+
+<Tabs>
+  <Tab title="Symptom">
+    ```
+    Error: Connection timeout
+    ConnectionError: Failed to connect to localhost:1433
+    ```
+  </Tab>
+  
+  <Tab title="Solutions">
+    1. Verify SQL Server is running:
+       ```powershell
+       Get-Service MSSQLSERVER
+       ```
+    
+    2. Check TCP/IP is enabled in SQL Server Configuration Manager
+    
+    3. Verify port 1433 is listening:
+       ```bash
+       netstat -an | grep 1433
+       ```
+    
+    4. Increase `connectTimeout` in `database.js`
+  </Tab>
+</Tabs>
+
+### Query timeout errors
+
+<Tabs>
+  <Tab title="Symptom">
+    ```
+    Error: Timeout: Request failed to complete in 60000ms
+    ```
+  </Tab>
+  
+  <Tab title="Solutions">
+    1. Increase `requestTimeout` in `database.js`:
+       ```javascript
+       requestTimeout: 120000 // 2 minutes
+       ```
+    
+    2. Optimize slow queries with indexes
+    
+    3. Check for table locks:
+       ```sql
+       SELECT * FROM sys.dm_tran_locks;
+       ```
+  </Tab>
+</Tabs>
+
+### Pool exhaustion
+
+<Tabs>
+  <Tab title="Symptom">
+    ```
+    Error: Connection pool exhausted
+    ```
+  </Tab>
+  
+  <Tab title="Solutions">
+    1. Increase pool size:
+       ```javascript
+       pool: { max: 20 }
+       ```
+    
+    2. Ensure connections are closed:
+       ```javascript
+       await closeConnection(pool);
+       ```
+    
+    3. Check for connection leaks in application code
+  </Tab>
+</Tabs>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/configuration/environment-variables">
+    Configure database connection settings
+  </Card>
+  
+  <Card title="Security Configuration" icon="shield" href="/configuration/security">
+    Secure your database connections
+  </Card>
+</CardGroup>

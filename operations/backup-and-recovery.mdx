@@ -1,0 +1,658 @@
+---
+title: Backup and Recovery Procedures
+description: Comprehensive guide for backing up and restoring the DitzlerTotes database including automated backup scripts, recovery strategies, and disaster recovery planning
+---
+
+## Overview
+
+Regular backups are critical for protecting your DitzlerTotes data. This guide covers backup strategies, automated backup procedures, and step-by-step recovery processes.
+
+<Warning>
+Test your backup and recovery procedures regularly. A backup is only as good as your ability to restore from it.
+</Warning>
+
+## Backup Strategy
+
+### Backup Types
+
+<CardGroup cols={3}>
+  <Card title="Full Backup" icon="database">
+    Complete database backup including all data, tables, procedures, and functions
+  </Card>
+  <Card title="Differential Backup" icon="code-compare">
+    Backs up only data changed since the last full backup
+  </Card>
+  <Card title="Transaction Log Backup" icon="clock-rotate-left">
+    Captures transaction logs for point-in-time recovery
+  </Card>
+</CardGroup>
+
+### Recommended Backup Schedule
+
+| Backup Type | Frequency | Retention Period |
+|-------------|-----------|------------------|
+| Full Backup | Daily (2 AM) | 30 days |
+| Differential Backup | Every 6 hours | 7 days |
+| Transaction Log | Every 15 minutes | 3 days |
+| Event Log Export | Weekly | 90 days |
+
+## Automated Backup Script
+
+The system includes an automated backup script located at `.agent/skills/db_management/scripts/backup_db.js`.
+
+### Backup Script Implementation
+
+```javascript
+const sql = require('mssql');
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config();
+
+const config = {
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE,
+    server: process.env.DB_SERVER,
+    port: parseInt(process.env.DB_PORT),
+    options: {
+        encrypt: false,
+        trustServerCertificate: true
+    }
+};
+
+const dbName = process.env.DB_DATABASE;
+let backupPath = process.argv[2];
+
+if (!backupPath) {
+    const backupDir = path.resolve(__dirname, '../../../../backups');
+    if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    backupPath = path.join(backupDir, `${dbName}_${timestamp}.bak`);
+}
+
+const absoluteBackupPath = path.resolve(backupPath);
+
+async function run() {
+    try {
+        console.log(`Backing up database ${dbName} to ${absoluteBackupPath}...`);
+        await sql.connect(config);
+
+        const query = `
+            BACKUP DATABASE [${dbName}] 
+            TO DISK = '${absoluteBackupPath}' 
+            WITH FORMAT, 
+            MEDIANAME = 'DitzlerDataBackup', 
+            NAME = 'Full Backup of ${dbName}'
+        `;
+
+        await sql.query(query);
+        console.log('Backup completed successfully.');
+    } catch (err) {
+        console.error('Error backing up database:', err);
+        process.exit(1);
+    } finally {
+        await sql.close();
+    }
+}
+
+run();
+```
+
+### Running the Backup Script
+
+<Tabs>
+  <Tab title="Default Location">
+    ```bash
+    # Backup to default location (./backups/)
+    node .agent/skills/db_management/scripts/backup_db.js
+    ```
+  </Tab>
+  <Tab title="Custom Location">
+    ```bash
+    # Backup to custom location
+    node .agent/skills/db_management/scripts/backup_db.js "/path/to/backup/Ditzler_backup.bak"
+    ```
+  </Tab>
+  <Tab title="With npm Script">
+    Add to `package.json`:
+    ```json
+    {
+      "scripts": {
+        "backup": "node .agent/skills/db_management/scripts/backup_db.js"
+      }
+    }
+    ```
+    
+    Then run:
+    ```bash
+    npm run backup
+    ```
+  </Tab>
+</Tabs>
+
+### Automated Backup Scheduling
+
+#### Using Cron (Linux/macOS)
+
+```bash
+# Edit crontab
+crontab -e
+
+# Add daily backup at 2 AM
+0 2 * * * cd /path/to/DitzlerTotes && node .agent/skills/db_management/scripts/backup_db.js >> /var/log/ditzler-backup.log 2>&1
+
+# Add differential backup every 6 hours
+0 */6 * * * cd /path/to/DitzlerTotes && node scripts/differential_backup.js >> /var/log/ditzler-backup.log 2>&1
+```
+
+#### Using Task Scheduler (Windows)
+
+```powershell
+# Create scheduled task for daily backup
+$action = New-ScheduledTaskAction -Execute 'node' -Argument 'C:\DitzlerTotes\.agent\skills\db_management\scripts\backup_db.js' -WorkingDirectory 'C:\DitzlerTotes'
+$trigger = New-ScheduledTaskTrigger -Daily -At 2am
+$principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -RunLevel Highest
+
+Register-ScheduledTask -TaskName "DitzlerTotes Daily Backup" -Action $action -Trigger $trigger -Principal $principal
+```
+
+## Manual Backup Procedures
+
+### Full Database Backup
+
+<Steps>
+  <Step title="Connect to SQL Server">
+    ```sql
+    USE master;
+    GO
+    ```
+  </Step>
+  
+  <Step title="Execute Backup Command">
+    ```sql
+    BACKUP DATABASE [Ditzler]
+    TO DISK = 'C:\Backups\Ditzler_Full.bak'
+    WITH FORMAT,
+         MEDIANAME = 'DitzlerDataBackup',
+         NAME = 'Full Backup of Ditzler Database';
+    GO
+    ```
+  </Step>
+  
+  <Step title="Verify Backup">
+    ```sql
+    RESTORE VERIFYONLY
+    FROM DISK = 'C:\Backups\Ditzler_Full.bak';
+    GO
+    ```
+  </Step>
+</Steps>
+
+### Differential Backup
+
+```sql
+BACKUP DATABASE [Ditzler]
+TO DISK = 'C:\Backups\Ditzler_Differential.bak'
+WITH DIFFERENTIAL,
+     NAME = 'Differential Backup of Ditzler Database';
+GO
+```
+
+### Transaction Log Backup
+
+```sql
+BACKUP LOG [Ditzler]
+TO DISK = 'C:\Backups\Ditzler_Log.trn'
+WITH NAME = 'Transaction Log Backup';
+GO
+```
+
+<Info>
+Transaction log backups require the database to be in FULL recovery model.
+</Info>
+
+### Set Recovery Model
+
+```sql
+-- Check current recovery model
+SELECT name, recovery_model_desc
+FROM sys.databases
+WHERE name = 'Ditzler';
+
+-- Set to FULL recovery model
+ALTER DATABASE [Ditzler] SET RECOVERY FULL;
+GO
+```
+
+## Backup Verification
+
+Always verify your backups to ensure they can be restored:
+
+```sql
+-- Verify backup file integrity
+RESTORE VERIFYONLY
+FROM DISK = 'C:\Backups\Ditzler_Full.bak';
+
+-- Get backup file information
+RESTORE HEADERONLY
+FROM DISK = 'C:\Backups\Ditzler_Full.bak';
+
+-- Get detailed backup file contents
+RESTORE FILELISTONLY
+FROM DISK = 'C:\Backups\Ditzler_Full.bak';
+```
+
+## Database Recovery Procedures
+
+### Full Database Restoration
+
+<Warning>
+Restoring a database will overwrite all existing data. Ensure you have a valid backup and user confirmation before proceeding.
+</Warning>
+
+<Steps>
+  <Step title="Disconnect All Users">
+    ```sql
+    USE master;
+    GO
+    
+    ALTER DATABASE [Ditzler] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    GO
+    ```
+  </Step>
+  
+  <Step title="Restore Database">
+    ```sql
+    RESTORE DATABASE [Ditzler]
+    FROM DISK = 'C:\Backups\Ditzler_Full.bak'
+    WITH REPLACE,
+         RECOVERY;
+    GO
+    ```
+  </Step>
+  
+  <Step title="Set Multi-User Mode">
+    ```sql
+    ALTER DATABASE [Ditzler] SET MULTI_USER;
+    GO
+    ```
+  </Step>
+  
+  <Step title="Verify Data Integrity">
+    ```sql
+    USE [Ditzler];
+    GO
+    
+    -- Check table counts
+    SELECT 'Usuarios' as TableName, COUNT(*) as RecordCount FROM Usuarios
+    UNION ALL
+    SELECT 'Clientes', COUNT(*) FROM Clientes
+    UNION ALL
+    SELECT 'Totes', COUNT(*) FROM Totes
+    UNION ALL
+    SELECT 'EVENTOS', COUNT(*) FROM EVENTOS
+    UNION ALL
+    SELECT 'Productos', COUNT(*) FROM Productos
+    UNION ALL
+    SELECT 'Ubicaciones', COUNT(*) FROM Ubicaciones;
+    GO
+    
+    -- Run integrity check
+    DBCC CHECKDB('Ditzler') WITH NO_INFOMSGS;
+    GO
+    ```
+  </Step>
+</Steps>
+
+### Point-in-Time Recovery
+
+Restore database to a specific point in time:
+
+<Steps>
+  <Step title="Restore Full Backup">
+    ```sql
+    RESTORE DATABASE [Ditzler]
+    FROM DISK = 'C:\Backups\Ditzler_Full.bak'
+    WITH NORECOVERY, REPLACE;
+    GO
+    ```
+  </Step>
+  
+  <Step title="Apply Differential Backup (if available)">
+    ```sql
+    RESTORE DATABASE [Ditzler]
+    FROM DISK = 'C:\Backups\Ditzler_Differential.bak'
+    WITH NORECOVERY;
+    GO
+    ```
+  </Step>
+  
+  <Step title="Apply Transaction Logs to Specific Time">
+    ```sql
+    RESTORE LOG [Ditzler]
+    FROM DISK = 'C:\Backups\Ditzler_Log.trn'
+    WITH STOPAT = '2024-12-15 14:30:00',
+         RECOVERY;
+    GO
+    ```
+  </Step>
+</Steps>
+
+### Restore to New Database
+
+Create a copy of the database without affecting the production database:
+
+```sql
+RESTORE DATABASE [Ditzler_Test]
+FROM DISK = 'C:\Backups\Ditzler_Full.bak'
+WITH MOVE 'Ditzler' TO 'C:\SQLData\Ditzler_Test.mdf',
+     MOVE 'Ditzler_log' TO 'C:\SQLData\Ditzler_Test_log.ldf',
+     REPLACE;
+GO
+```
+
+## Event Log Backup
+
+The `EVENTOS` table grows over time and should be archived periodically.
+
+### Export Event Logs
+
+```sql
+-- Export events older than 90 days to archive table
+SELECT *
+INTO EVENTOS_Archive_2024
+FROM EVENTOS
+WHERE FechaEvento < DATEADD(day, -90, GETDATE());
+
+-- Verify archived data
+SELECT COUNT(*) as ArchivedRecords FROM EVENTOS_Archive_2024;
+
+-- Delete archived events from main table
+DELETE FROM EVENTOS
+WHERE FechaEvento < DATEADD(day, -90, GETDATE());
+```
+
+### Export to CSV
+
+```sql
+-- Export using bcp utility
+EXEC xp_cmdshell 'bcp "SELECT * FROM Ditzler.dbo.EVENTOS WHERE FechaEvento < DATEADD(day, -90, GETDATE())" queryout "C:\Backups\eventos_archive.csv" -c -t"," -T -S localhost';
+```
+
+<Info>
+Enable `xp_cmdshell` only when needed and disable it immediately after use for security.
+</Info>
+
+## Disaster Recovery Planning
+
+### Recovery Time Objective (RTO)
+
+Target time to restore service after a disaster:
+
+| Scenario | Target RTO | Priority |
+|----------|------------|----------|
+| Database corruption | 1 hour | Critical |
+| Server hardware failure | 4 hours | High |
+| Data center outage | 8 hours | Medium |
+| Accidental data deletion | 30 minutes | High |
+
+### Recovery Point Objective (RPO)
+
+Maximum acceptable data loss:
+
+| Backup Strategy | RPO | Data Loss Risk |
+|-----------------|-----|----------------|
+| Daily full backup only | 24 hours | High |
+| Daily full + 6-hour differential | 6 hours | Medium |
+| Full + Differential + 15-min log | 15 minutes | Low |
+
+### Disaster Recovery Checklist
+
+<AccordionGroup>
+  <Accordion title="Pre-Disaster Preparation">
+    <Steps>
+      <Step title="Regular Backups">
+        Verify automated backups are running successfully
+      </Step>
+      <Step title="Offsite Storage">
+        Store backup copies in separate physical location
+      </Step>
+      <Step title="Documentation">
+        Maintain up-to-date recovery procedures
+      </Step>
+      <Step title="Test Restores">
+        Perform quarterly restore drills
+      </Step>
+      <Step title="Contact List">
+        Maintain current emergency contact information
+      </Step>
+    </Steps>
+  </Accordion>
+  
+  <Accordion title="During Disaster">
+    <Steps>
+      <Step title="Assess Situation">
+        Determine scope and severity of the incident
+      </Step>
+      <Step title="Notify Stakeholders">
+        Alert management and affected users
+      </Step>
+      <Step title="Activate Recovery Plan">
+        Follow documented recovery procedures
+      </Step>
+      <Step title="Document Actions">
+        Record all recovery steps taken
+      </Step>
+    </Steps>
+  </Accordion>
+  
+  <Accordion title="Post-Recovery">
+    <Steps>
+      <Step title="Verify Data Integrity">
+        Run DBCC CHECKDB and data validation queries
+      </Step>
+      <Step title="Test Application">
+        Verify all system functions work correctly
+      </Step>
+      <Step title="Restore Normal Operations">
+        Notify users that system is operational
+      </Step>
+      <Step title="Post-Mortem Analysis">
+        Review incident and update procedures
+      </Step>
+    </Steps>
+  </Accordion>
+</AccordionGroup>
+
+## Backup Storage Best Practices
+
+<CardGroup cols={2}>
+  <Card title="3-2-1 Rule" icon="hard-drive">
+    3 copies of data, 2 different media types, 1 offsite copy
+  </Card>
+  <Card title="Encryption" icon="lock">
+    Encrypt backups containing sensitive data
+  </Card>
+  <Card title="Access Control" icon="user-shield">
+    Restrict backup file access to authorized personnel
+  </Card>
+  <Card title="Retention Policy" icon="calendar-check">
+    Define and enforce backup retention periods
+  </Card>
+</CardGroup>
+
+### Offsite Backup Options
+
+<Tabs>
+  <Tab title="Cloud Storage">
+    ```bash
+    # Upload to Azure Blob Storage
+    az storage blob upload \
+      --account-name ditzlerbackups \
+      --container-name database-backups \
+      --name "Ditzler_$(date +%Y%m%d).bak" \
+      --file "./backups/Ditzler_backup.bak"
+    ```
+  </Tab>
+  <Tab title="Network Share">
+    ```bash
+    # Copy to network share (Linux)
+    cp ./backups/Ditzler_backup.bak /mnt/backup-server/ditzler/
+    
+    # Windows
+    copy .\backups\Ditzler_backup.bak \\backup-server\ditzler\
+    ```
+  </Tab>
+  <Tab title="External Drive">
+    ```bash
+    # Copy to mounted external drive
+    rsync -avz ./backups/ /media/backup-drive/ditzler-backups/
+    ```
+  </Tab>
+</Tabs>
+
+## Monitoring Backup Jobs
+
+### Check Backup History
+
+```sql
+-- View recent backups
+SELECT 
+    database_name,
+    backup_start_date,
+    backup_finish_date,
+    DATEDIFF(second, backup_start_date, backup_finish_date) as duration_seconds,
+    type,
+    backup_size / 1024 / 1024 as size_mb,
+    physical_device_name
+FROM msdb.dbo.backupset bs
+INNER JOIN msdb.dbo.backupmediafamily bmf ON bs.media_set_id = bmf.media_set_id
+WHERE database_name = 'Ditzler'
+ORDER BY backup_start_date DESC;
+```
+
+### Alert on Backup Failures
+
+```javascript
+// monitoring/backup-monitor.js
+const { getPool } = require('../config/database');
+const nodemailer = require('nodemailer');
+
+async function checkBackupStatus() {
+    try {
+        const pool = await getPool();
+        
+        const result = await pool.request().query(`
+            SELECT TOP 1
+                backup_start_date,
+                backup_finish_date,
+                DATEDIFF(hour, backup_finish_date, GETDATE()) as hours_since_backup
+            FROM msdb.dbo.backupset
+            WHERE database_name = 'Ditzler'
+              AND type = 'D'
+            ORDER BY backup_start_date DESC
+        `);
+        
+        const hoursSinceBackup = result.recordset[0]?.hours_since_backup;
+        
+        if (hoursSinceBackup > 26) {
+            // Send alert - no backup in over 26 hours
+            await sendAlert('No recent backup found', {
+                hoursSinceBackup,
+                lastBackup: result.recordset[0]?.backup_finish_date
+            });
+        }
+        
+    } catch (error) {
+        console.error('Backup monitoring failed:', error);
+    }
+}
+
+// Run every hour
+setInterval(checkBackupStatus, 3600000);
+```
+
+## Testing Recovery Procedures
+
+### Quarterly Recovery Drill
+
+<Steps>
+  <Step title="Schedule Test">
+    Plan recovery drill during low-activity period
+  </Step>
+  <Step title="Prepare Test Environment">
+    Set up isolated test database server
+  </Step>
+  <Step title="Restore Latest Backup">
+    Follow full restoration procedures
+  </Step>
+  <Step title="Verify Application Connectivity">
+    Test application connection to restored database
+  </Step>
+  <Step title="Validate Data">
+    Run queries to verify data integrity and completeness
+  </Step>
+  <Step title="Document Results">
+    Record success/failures and time to recovery
+  </Step>
+  <Step title="Update Procedures">
+    Revise procedures based on lessons learned
+  </Step>
+</Steps>
+
+## Common Recovery Scenarios
+
+### Scenario 1: Accidental Data Deletion
+
+**Problem**: User accidentally deleted important tote records
+
+**Solution**:
+1. Identify the time before deletion occurred
+2. Restore to new database using point-in-time recovery
+3. Export the deleted records
+4. Import records back into production database
+
+```sql
+-- Find deleted records in restored database
+SELECT * FROM [Ditzler_Test].dbo.Totes
+WHERE Id NOT IN (SELECT Id FROM [Ditzler].dbo.Totes);
+```
+
+### Scenario 2: Database Corruption
+
+**Problem**: Database becomes corrupted and inaccessible
+
+**Solution**:
+1. Attempt to repair using DBCC CHECKDB
+2. If repair fails, restore from latest full backup
+3. Apply differential and transaction log backups
+4. Verify data integrity
+
+```sql
+-- Attempt repair (data loss possible)
+DBCC CHECKDB('Ditzler', REPAIR_ALLOW_DATA_LOSS);
+```
+
+### Scenario 3: Server Hardware Failure
+
+**Problem**: Database server hardware fails completely
+
+**Solution**:
+1. Provision new server or failover to standby
+2. Install SQL Server with same version/edition
+3. Restore database from latest backup
+4. Update application connection strings
+5. Verify all services operational
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Maintenance" icon="wrench" href="/operations/maintenance">
+    Regular maintenance procedures and schedules
+  </Card>
+  <Card title="Monitoring" icon="monitor-waveform" href="/operations/monitoring">
+    System monitoring and health checks
+  </Card>
+</CardGroup>

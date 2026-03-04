@@ -1,0 +1,313 @@
+---
+title: Environment Variables
+description: Complete guide to configuring environment variables for the DitzlerTotes application
+---
+
+## Overview
+
+DitzlerTotes uses environment variables to configure database connections, server settings, and security features. All sensitive configuration should be stored in a `.env` file that is never committed to version control.
+
+## Required Variables
+
+### Database Configuration
+
+These variables configure the SQL Server database connection:
+
+<ParamField path="DB_USER" type="string" required>
+  SQL Server username with access to the Ditzler database
+  
+  ```env
+  DB_USER=your_database_user
+  ```
+</ParamField>
+
+<ParamField path="DB_PASSWORD" type="string" required>
+  SQL Server password for the database user
+  
+  ```env
+  DB_PASSWORD=your_database_password
+  ```
+  
+  <Warning>Never commit this value to version control</Warning>
+</ParamField>
+
+<ParamField path="DB_DATABASE" type="string" required default="Ditzler">
+  Name of the SQL Server database
+  
+  ```env
+  DB_DATABASE=Ditzler
+  ```
+</ParamField>
+
+<ParamField path="DB_SERVER" type="string" required default="localhost">
+  SQL Server hostname or IP address
+  
+  ```env
+  DB_SERVER=localhost
+  ```
+  
+  For remote servers, use the full hostname or IP:
+  ```env
+  DB_SERVER=192.168.1.100
+  DB_SERVER=sql-server.company.com
+  ```
+</ParamField>
+
+<ParamField path="DB_PORT" type="number" required default="1433">
+  SQL Server port number (default is 1433)
+  
+  ```env
+  DB_PORT=1433
+  ```
+</ParamField>
+
+### Server Configuration
+
+<ParamField path="PORT" type="number" default="3003">
+  Port number for the Express.js server
+  
+  ```env
+  PORT=3003
+  ```
+</ParamField>
+
+<ParamField path="NODE_ENV" type="string" default="development">
+  Application environment mode
+  
+  ```env
+  NODE_ENV=development
+  ```
+  
+  Valid values:
+  - `development` - Development mode with verbose logging
+  - `production` - Production mode with optimizations
+</ParamField>
+
+### Session Security
+
+<ParamField path="SESSION_SECRET" type="string" required>
+  Secret key used to sign session cookies. Must be changed in production.
+  
+  ```env
+  SESSION_SECRET=change-this-to-a-random-secret-key-in-production
+  ```
+  
+  <Warning>
+    Using the default value in production is a critical security vulnerability. Always generate a unique secret for production environments.
+  </Warning>
+</ParamField>
+
+## Setup Instructions
+
+<Steps>
+  <Step title="Copy the example file">
+    Create your `.env` file from the example template:
+    
+    ```bash
+    cp .env.example .env
+    ```
+  </Step>
+  
+  <Step title="Configure database credentials">
+    Update `DB_USER` and `DB_PASSWORD` with your actual SQL Server credentials:
+    
+    ```env
+    DB_USER=ditzler_admin
+    DB_PASSWORD=SecurePassword123!
+    ```
+  </Step>
+  
+  <Step title="Generate SESSION_SECRET">
+    Generate a secure random secret key for production:
+    
+    **Using Node.js:**
+    ```bash
+    node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+    ```
+    
+    **Using PowerShell:**
+    ```powershell
+    [guid]::NewGuid().ToString() + [guid]::NewGuid().ToString()
+    ```
+    
+    Copy the output to your `.env` file:
+    ```env
+    SESSION_SECRET=a1b2c3d4e5f6...your_generated_secret
+    ```
+  </Step>
+  
+  <Step title="Verify configuration">
+    Never commit the `.env` file to version control. Verify it's in `.gitignore`:
+    
+    ```bash
+    grep -q "^\.env$" .gitignore && echo "✅ .env is ignored" || echo "❌ Add .env to .gitignore"
+    ```
+  </Step>
+</Steps>
+
+## Complete Example
+
+<CodeGroup>
+```env Development
+# Database Configuration
+DB_USER=dev_user
+DB_PASSWORD=dev_password
+DB_DATABASE=Ditzler
+DB_SERVER=localhost
+DB_PORT=1433
+
+# Server Configuration
+PORT=3003
+NODE_ENV=development
+
+# Session Security
+SESSION_SECRET=dev-secret-key-not-for-production
+```
+
+```env Production
+# Database Configuration
+DB_USER=prod_user
+DB_PASSWORD=Pr0d_S3cur3_P@ssw0rd!
+DB_DATABASE=Ditzler
+DB_SERVER=sql-prod.company.com
+DB_PORT=1433
+
+# Server Configuration
+PORT=3000
+NODE_ENV=production
+
+# Session Security (generated with crypto.randomBytes)
+SESSION_SECRET=f3a8b92c5d6e1a4c9f7b2d8e5a1c6f9b3d7a4e8c2f5b9d1a6e3c8f4b7d2a5e9c1f6b3d8a4e7c2f9b5d1a8e6c3f
+```
+</CodeGroup>
+
+## Environment Validation
+
+The application validates critical environment variables on startup. If required variables are missing, the server will not start:
+
+```bash
+❌ ERROR: Las variables de entorno DB_USER y DB_PASSWORD son requeridas.
+📝 Por favor, configura el archivo .env con las credenciales de la base de datos.
+📄 Puedes usar .env.example como plantilla.
+```
+
+<Check>When configured correctly, you'll see:</Check>
+
+```bash
+✅ Variables de entorno cargadas correctamente
+```
+
+## Security Best Practices
+
+<Warning>
+  **Critical Security Guidelines**
+</Warning>
+
+<AccordionGroup>
+  <Accordion title="Never commit secrets to version control">
+    - Always add `.env` to `.gitignore`
+    - Never hardcode credentials in source code
+    - Use `.env.example` as a template (without real values)
+    - Rotate credentials regularly
+  </Accordion>
+  
+  <Accordion title="Use strong passwords">
+    - Database passwords should be at least 16 characters
+    - Use a mix of uppercase, lowercase, numbers, and special characters
+    - Avoid dictionary words and common patterns
+    - Use a password manager to generate and store credentials
+  </Accordion>
+  
+  <Accordion title="Generate unique SESSION_SECRET">
+    - Never use the default value in production
+    - Generate a cryptographically secure random string
+    - Minimum 64 characters recommended
+    - Changing this value will invalidate all existing sessions
+  </Accordion>
+  
+  <Accordion title="Secure file permissions">
+    On Unix-like systems, restrict `.env` file access:
+    
+    ```bash
+    chmod 600 .env
+    ```
+    
+    This ensures only the file owner can read/write the file.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Cannot connect to database
+
+**Symptom:** Server fails to start with database connection error
+
+<Steps>
+  <Step title="Verify credentials">
+    Ensure `DB_USER` and `DB_PASSWORD` are correct
+  </Step>
+  
+  <Step title="Check server connectivity">
+    Test SQL Server connectivity:
+    ```bash
+    telnet DB_SERVER 1433
+    ```
+  </Step>
+  
+  <Step title="Verify database exists">
+    Ensure the `Ditzler` database has been created
+  </Step>
+  
+  <Step title="Check firewall rules">
+    Ensure port 1433 is open in your firewall
+  </Step>
+</Steps>
+
+### Sessions not persisting
+
+**Symptom:** Users are logged out immediately or on page refresh
+
+<Check>Verify `SESSION_SECRET` is set:</Check>
+
+```bash
+grep SESSION_SECRET .env
+```
+
+If using the default value, the application will log a warning.
+
+### Port already in use
+
+**Symptom:** `Error: listen EADDRINUSE: address already in use :::3003`
+
+<Steps>
+  <Step title="Change the PORT variable">
+    ```env
+    PORT=3004
+    ```
+  </Step>
+  
+  <Step title="Or kill the process using the port">
+    **Linux/Mac:**
+    ```bash
+    lsof -ti:3003 | xargs kill -9
+    ```
+    
+    **Windows:**
+    ```powershell
+    netstat -ano | findstr :3003
+    taskkill /PID <process_id> /F
+    ```
+  </Step>
+</Steps>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Database Setup" icon="database" href="/configuration/database-setup">
+    Configure SQL Server and run migrations
+  </Card>
+  
+  <Card title="Security Configuration" icon="shield" href="/configuration/security">
+    Security middleware and best practices
+  </Card>
+</CardGroup>

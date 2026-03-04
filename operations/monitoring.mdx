@@ -1,0 +1,636 @@
+---
+title: Monitoring and Health Checks
+description: Comprehensive monitoring guide for the DitzlerTotes system including health endpoints, performance metrics, and audit log analysis
+---
+
+## Overview
+
+Effective monitoring is essential for maintaining system reliability and identifying issues before they impact operations. DitzlerTotes provides built-in health checks and comprehensive audit logging for system monitoring.
+
+## Health Check Endpoint
+
+The system provides a dedicated health check endpoint to verify system status and database connectivity.
+
+### API Endpoint
+
+```bash
+GET /api/health
+```
+
+### Health Check Implementation
+
+The health check verifies:
+- Server uptime
+- Database connectivity
+- Database response time
+- System timestamp
+
+<CodeGroup>
+```bash cURL
+curl http://localhost:3000/api/health
+```
+
+```javascript Node.js
+const response = await fetch('http://localhost:3000/api/health');
+const health = await response.json();
+console.log(health);
+```
+
+```python Python
+import requests
+
+response = requests.get('http://localhost:3000/api/health')
+health = response.json()
+print(health)
+```
+</CodeGroup>
+
+### Successful Response
+
+When the system is healthy:
+
+```json
+{
+  "status": "UP",
+  "uptime": 3652.847,
+  "timestamp": "2024-12-15T14:30:00.000Z",
+  "services": {
+    "database": {
+      "status": "UP",
+      "details": {
+        "connected": true,
+        "latency_ms": 12,
+        "timestamp": "2024-12-15T14:30:00.000Z",
+        "database": "Ditzler",
+        "server": "localhost"
+      }
+    }
+  }
+}
+```
+
+### Error Response
+
+When the system experiences issues:
+
+```json
+{
+  "status": "DOWN",
+  "timestamp": "2024-12-15T14:30:00.000Z",
+  "services": {
+    "database": {
+      "status": "DOWN",
+      "error": "Connection timeout"
+    }
+  }
+}
+```
+
+<Info>
+The health endpoint returns HTTP 200 when healthy and HTTP 503 when unhealthy, making it ideal for load balancer health checks.
+</Info>
+
+## Health Check Components
+
+### Controller Logic
+
+The health controller (`controllers/health.controller.js`) orchestrates health checks:
+
+```javascript
+exports.checkHealth = async (req, res) => {
+    try {
+        const dbStatus = await healthService.checkDatabaseConnection();
+
+        res.status(200).json({
+            status: 'UP',
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString(),
+            services: {
+                database: {
+                    status: 'UP',
+                    details: dbStatus
+                }
+            }
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: 'DOWN',
+            timestamp: new Date().toISOString(),
+            services: {
+                database: {
+                    status: 'DOWN',
+                    error: error.message
+                }
+            }
+        });
+    }
+};
+```
+
+### Database Health Check
+
+The health service (`services/health.service.js`) performs the actual connectivity test:
+
+```javascript
+exports.checkDatabaseConnection = async () => {
+    try {
+        const pool = await getPool();
+        const start = Date.now();
+        await pool.request().query('SELECT 1');
+        const end = Date.now();
+
+        return {
+            connected: true,
+            latency_ms: end - start,
+            timestamp: new Date().toISOString(),
+            database: pool.config.database || process.env.DB_DATABASE,
+            server: pool.config.server || process.env.DB_SERVER
+        };
+    } catch (error) {
+        console.error('Health Check Failed:', error);
+        throw error;
+    }
+};
+```
+
+<Warning>
+Database latency above 100ms may indicate performance issues. Investigate query optimization and server resources.
+</Warning>
+
+## Monitoring Metrics
+
+### Key Performance Indicators
+
+Monitor these critical metrics:
+
+<CardGroup cols={2}>
+  <Card title="Server Uptime" icon="clock">
+    Track system availability and restart frequency
+  </Card>
+  <Card title="Database Latency" icon="gauge-high">
+    Monitor query response times (target: less than 50ms)
+  </Card>
+  <Card title="API Response Time" icon="stopwatch">
+    Track endpoint performance (target: less than 500ms)
+  </Card>
+  <Card title="Error Rate" icon="triangle-exclamation">
+    Monitor failed requests and exceptions
+  </Card>
+</CardGroup>
+
+### System Resource Monitoring
+
+#### CPU and Memory
+
+```bash
+# Monitor Node.js process resources
+top -p $(pgrep -f "node server.js")
+
+# Get detailed memory information
+node -e "console.log(process.memoryUsage())"
+```
+
+#### Process Information
+
+```javascript
+// Get process metrics programmatically
+const metrics = {
+  uptime: process.uptime(),
+  memory: process.memoryUsage(),
+  cpu: process.cpuUsage(),
+  pid: process.pid,
+  version: process.version
+};
+
+console.log(metrics);
+```
+
+### Database Monitoring
+
+#### Active Connections
+
+```sql
+-- Monitor active database connections
+SELECT 
+    DB_NAME(dbid) as DatabaseName,
+    COUNT(dbid) as NumberOfConnections,
+    loginame as LoginName
+FROM sys.sysprocesses
+WHERE dbid > 0
+GROUP BY dbid, loginame
+ORDER BY NumberOfConnections DESC;
+```
+
+#### Long-Running Queries
+
+```sql
+-- Identify long-running queries
+SELECT 
+    session_id,
+    start_time,
+    status,
+    command,
+    DB_NAME(database_id) as DatabaseName,
+    wait_type,
+    wait_time,
+    cpu_time,
+    total_elapsed_time,
+    blocking_session_id
+FROM sys.dm_exec_requests
+WHERE session_id > 50
+  AND total_elapsed_time > 5000
+ORDER BY total_elapsed_time DESC;
+```
+
+#### Database Performance
+
+```sql
+-- Check database performance metrics
+SELECT 
+    GETDATE() as CheckTime,
+    @@CONNECTIONS as TotalConnections,
+    @@CPU_BUSY as CPUBusy,
+    @@IO_BUSY as IOBusy,
+    @@IDLE as Idle,
+    @@PACK_RECEIVED as PacketsReceived,
+    @@PACK_SENT as PacketsSent;
+```
+
+## Audit System Monitoring
+
+The comprehensive audit system (`middleware/audit.js`) logs all system events for security and operational monitoring.
+
+### Audit Event Types
+
+The system tracks these event types:
+
+| Event Type | Description | Severity |
+|------------|-------------|----------|
+| `Login` | User authentication | Info |
+| `Logout` | User logout | Info |
+| `Creacion` | Record creation | Info |
+| `Actualizacion` | Record updates | Info |
+| `Eliminacion` | Record deletion | Warning |
+| `Error` | System errors | Error |
+| `Alerta` | System alerts | Warning |
+| `Configuracion` | Configuration changes | Info |
+
+### Audit Log Structure
+
+Each audit event captures:
+
+```json
+{
+  "Id": 1234,
+  "ToteId": 42,
+  "TipEvento": "Actualizacion",
+  "Descripcion": "Tote actualizado",
+  "Usuario": "Juan Pérez",
+  "FechaEvento": "2024-12-15T14:30:00.000Z",
+  "IpAddress": "192.168.1.100",
+  "UserAgent": "Mozilla/5.0...",
+  "Severidad": "Info",
+  "Modulo": "TOTES",
+  "Accion": "UPDATE",
+  "ResultadoExitoso": true,
+  "TiempoEjecucion": 45,
+  "SessionId": "sess_1234567890_abc123",
+  "DatosAdicionales": {
+    "usuarioId": 5,
+    "objetoTipo": "Tote",
+    "valoresAnteriores": {...},
+    "valoresNuevos": {...}
+  }
+}
+```
+
+### Monitoring Audit Logs
+
+#### Recent Events
+
+```sql
+-- Get recent audit events
+SELECT TOP 100
+    Id,
+    TipEvento,
+    Modulo,
+    Descripcion,
+    Usuario,
+    FechaEvento,
+    Severidad,
+    ResultadoExitoso
+FROM EVENTOS
+ORDER BY FechaEvento DESC;
+```
+
+#### Failed Operations
+
+```sql
+-- Monitor failed operations
+SELECT 
+    TipEvento,
+    Modulo,
+    COUNT(*) as ErrorCount,
+    MAX(FechaEvento) as LastOccurrence
+FROM EVENTOS
+WHERE ResultadoExitoso = 0
+  AND FechaEvento >= DATEADD(day, -7, GETDATE())
+GROUP BY TipEvento, Modulo
+ORDER BY ErrorCount DESC;
+```
+
+#### User Activity
+
+```sql
+-- Track user activity
+SELECT 
+    Usuario,
+    COUNT(*) as ActionCount,
+    MAX(FechaEvento) as LastActivity,
+    COUNT(DISTINCT IpAddress) as UniqueIPs
+FROM EVENTOS
+WHERE FechaEvento >= DATEADD(day, -1, GETDATE())
+GROUP BY Usuario
+ORDER BY ActionCount DESC;
+```
+
+#### Security Monitoring
+
+```sql
+-- Monitor failed login attempts
+SELECT 
+    CAST(FechaEvento AS DATE) as Date,
+    IpAddress,
+    COUNT(*) as FailedAttempts,
+    MAX(FechaEvento) as LastAttempt
+FROM EVENTOS
+WHERE TipEvento = 'Login'
+  AND ResultadoExitoso = 0
+  AND FechaEvento >= DATEADD(day, -30, GETDATE())
+GROUP BY CAST(FechaEvento AS DATE), IpAddress
+HAVING COUNT(*) >= 5
+ORDER BY FailedAttempts DESC;
+```
+
+### Event Statistics
+
+Query event statistics via API:
+
+```bash
+GET /api/eventos/estadisticas
+```
+
+Returns aggregated event data for dashboard visualization.
+
+## Alerting and Notifications
+
+### Critical Alerts to Monitor
+
+<AccordionGroup>
+  <Accordion title="Database Connection Failures">
+    **Trigger**: Health check returns DOWN status
+    
+    **Action**:
+    - Verify SQL Server is running
+    - Check network connectivity
+    - Review connection pool settings
+    - Check database server resources
+  </Accordion>
+  
+  <Accordion title="High Error Rate">
+    **Trigger**: Error events exceed 10% of total operations
+    
+    **Action**:
+    - Review error logs in EVENTOS table
+    - Check application logs
+    - Verify data integrity
+    - Test API endpoints manually
+  </Accordion>
+  
+  <Accordion title="Failed Login Attempts">
+    **Trigger**: Multiple failed logins from same IP
+    
+    **Action**:
+    - Review IP address and user agent
+    - Check for brute force attack patterns
+    - Consider temporary IP blocking
+    - Alert security team
+  </Accordion>
+  
+  <Accordion title="High Database Latency">
+    **Trigger**: Database latency exceeds 100ms consistently
+    
+    **Action**:
+    - Check for long-running queries
+    - Review index fragmentation
+    - Verify server resources
+    - Consider query optimization
+  </Accordion>
+</AccordionGroup>
+
+### Setting Up Monitoring Scripts
+
+#### Automated Health Check
+
+```bash
+#!/bin/bash
+# health-monitor.sh
+
+HEALTH_URL="http://localhost:3000/api/health"
+ALERT_EMAIL="admin@example.com"
+
+response=$(curl -s -o /dev/null -w "%{http_code}" $HEALTH_URL)
+
+if [ $response -ne 200 ]; then
+    echo "Health check failed with status: $response" | \
+        mail -s "DitzlerTotes Health Alert" $ALERT_EMAIL
+    exit 1
+fi
+
+echo "Health check passed"
+exit 0
+```
+
+Schedule with cron:
+
+```bash
+# Check health every 5 minutes
+*/5 * * * * /path/to/health-monitor.sh >> /var/log/ditzler-health.log 2>&1
+```
+
+#### Database Monitoring Script
+
+```javascript
+// monitoring/db-monitor.js
+const { getPool } = require('../config/database');
+
+async function monitorDatabase() {
+    try {
+        const pool = await getPool();
+        
+        // Check active connections
+        const connResult = await pool.request().query(`
+            SELECT COUNT(*) as active_connections
+            FROM sys.dm_exec_connections
+            WHERE session_id > 50
+        `);
+        
+        const activeConnections = connResult.recordset[0].active_connections;
+        
+        if (activeConnections > 50) {
+            console.warn(`⚠️  High connection count: ${activeConnections}`);
+        }
+        
+        // Check long-running queries
+        const queryResult = await pool.request().query(`
+            SELECT COUNT(*) as long_queries
+            FROM sys.dm_exec_requests
+            WHERE total_elapsed_time > 10000
+        `);
+        
+        const longQueries = queryResult.recordset[0].long_queries;
+        
+        if (longQueries > 0) {
+            console.warn(`⚠️  Long-running queries detected: ${longQueries}`);
+        }
+        
+        console.log('✓ Database monitoring completed');
+        
+    } catch (error) {
+        console.error('❌ Database monitoring failed:', error.message);
+    }
+}
+
+setInterval(monitorDatabase, 60000); // Run every minute
+```
+
+## Dashboard Metrics
+
+The system provides real-time metrics via the dashboard API:
+
+```bash
+GET /api/dashboard/stats
+```
+
+Returns key operational metrics:
+
+```json
+{
+  "totalTotes": 1250,
+  "totalClientes": 45,
+  "totesDisponibles": 320,
+  "totesEnUso": 850,
+  "totesMantenimiento": 60,
+  "totesFueraServicio": 20,
+  "alertasActivas": 12,
+  "actividadReciente": [...]
+}
+```
+
+### Operator Statistics
+
+```bash
+GET /api/operador/stats
+```
+
+Provides operational indicators for monitoring:
+
+```json
+{
+  "totesLlenadosHoy": 45,
+  "totesDespachadosHoy": 38,
+  "movimientosHoy": 92,
+  "tiempoPromedioLlenado": 8.5,
+  "eficienciaOperacional": 94.2
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Regular Health Checks" icon="heartbeat">
+    Monitor health endpoint every 1-5 minutes
+  </Card>
+  <Card title="Audit Log Review" icon="magnifying-glass">
+    Review audit logs daily for anomalies
+  </Card>
+  <Card title="Performance Baselines" icon="chart-line">
+    Establish baseline metrics for comparison
+  </Card>
+  <Card title="Alert Thresholds" icon="bell">
+    Set appropriate thresholds to avoid alert fatigue
+  </Card>
+</CardGroup>
+
+## Monitoring Tools Integration
+
+### Prometheus Integration
+
+Example metrics endpoint for Prometheus:
+
+```javascript
+// metrics/prometheus.js
+const promClient = require('prom-client');
+
+const register = new promClient.Registry();
+
+// Define metrics
+const httpRequestDuration = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+  registers: [register]
+});
+
+const dbQueryDuration = new promClient.Histogram({
+  name: 'db_query_duration_seconds',
+  help: 'Duration of database queries in seconds',
+  labelNames: ['query_type'],
+  registers: [register]
+});
+
+// Expose metrics endpoint
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+```
+
+### Log Aggregation
+
+Integrate with log aggregation tools like ELK Stack or Splunk:
+
+```javascript
+// Use structured logging
+const logger = {
+  info: (message, meta) => {
+    console.log(JSON.stringify({
+      level: 'info',
+      message,
+      timestamp: new Date().toISOString(),
+      ...meta
+    }));
+  },
+  error: (message, error, meta) => {
+    console.error(JSON.stringify({
+      level: 'error',
+      message,
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString(),
+      ...meta
+    }));
+  }
+};
+```
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Maintenance" icon="wrench" href="/operations/maintenance">
+    System maintenance procedures and schedules
+  </Card>
+  <Card title="Backup & Recovery" icon="database" href="/operations/backup-and-recovery">
+    Backup strategies and disaster recovery
+  </Card>
+</CardGroup>

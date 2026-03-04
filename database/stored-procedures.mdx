@@ -1,0 +1,711 @@
+---
+title: Stored Procedures
+description: Complete documentation of all stored procedures in the DitzlerTotes database with usage examples and parameters
+---
+
+## Overview
+
+The DitzlerTotes database includes 7 stored procedures that encapsulate core business logic and optimize database operations.
+
+| Procedure | Purpose | Complexity | Usage Frequency |
+|-----------|---------|------------|----------------|
+| `SP_RegistrarEvento` | Log system events and audit trail | Medium | Very High |
+| `SP_ValidarLogin` | User authentication | Low | High |
+| `SP_EstadisticasDashboard` | Dashboard KPI calculation | High | High |
+| `SP_CrearUsuario` | User creation with validation | Low | Low |
+| `SP_CrearTote` | Tote creation with auto-code | Medium | Medium |
+| `SP_BuscarEventos` | Search/filter event logs | Medium | Medium |
+| `SP_LimpiarEventosAntiguos` | Archive/delete old events | Low | Low |
+
+---
+
+## SP_RegistrarEvento
+
+Records system events for audit trail, debugging, and monitoring.
+
+### Syntax
+
+```sql
+CREATE PROCEDURE SP_RegistrarEvento
+    @toteId INT = NULL,
+    @tipEvento NVARCHAR(50),
+    @descripcion NVARCHAR(500),
+    @usuario NVARCHAR(255) = NULL,
+    @datosAdicionales NVARCHAR(MAX) = NULL,
+    @ipAddress NVARCHAR(45) = NULL,
+    @userAgent NVARCHAR(500) = NULL,
+    @severidad NVARCHAR(20) = 'Info',
+    @modulo NVARCHAR(50) = NULL,
+    @accion NVARCHAR(100) = NULL,
+    @resultadoExitoso BIT = 1,
+    @tiempoEjecucion INT = NULL,
+    @sessionId NVARCHAR(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @toteId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Totes WHERE Id = @toteId) 
+        SET @toteId = NULL;
+    
+    INSERT INTO Eventos (
+        ToteId, TipEvento, Descripcion, Usuario, FechaEvento, 
+        DatosAdicionales, IpAddress, UserAgent, Severidad, 
+        Modulo, Accion, ResultadoExitoso, TiempoEjecucion, SessionId
+    )
+    VALUES (
+        @toteId, @tipEvento, @descripcion, @usuario, GETDATE(), 
+        @datosAdicionales, @ipAddress, @userAgent, @severidad, 
+        @modulo, @accion, @resultadoExitoso, @tiempoEjecucion, @sessionId
+    );
+    
+    SELECT SCOPE_IDENTITY() as EventoId;
+END
+```
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `@toteId` | INT | No | NULL | Related tote ID (validated) |
+| `@tipEvento` | NVARCHAR(50) | Yes | - | Event type (Login, CRUD, etc) |
+| `@descripcion` | NVARCHAR(500) | Yes | - | Event description |
+| `@usuario` | NVARCHAR(255) | No | NULL | User who triggered event |
+| `@datosAdicionales` | NVARCHAR(MAX) | No | NULL | JSON metadata |
+| `@ipAddress` | NVARCHAR(45) | No | NULL | Client IP address |
+| `@userAgent` | NVARCHAR(500) | No | NULL | Browser user agent |
+| `@severidad` | NVARCHAR(20) | No | 'Info' | Debug/Info/Warning/Error/Critical |
+| `@modulo` | NVARCHAR(50) | No | NULL | System module |
+| `@accion` | NVARCHAR(100) | No | NULL | Action performed |
+| `@resultadoExitoso` | BIT | No | 1 | Success flag |
+| `@tiempoEjecucion` | INT | No | NULL | Execution time in milliseconds |
+| `@sessionId` | NVARCHAR(100) | No | NULL | User session identifier |
+
+### Returns
+
+Returns a result set with one column:
+- `EventoId` (INT) - The ID of the newly created event record
+
+### Usage Examples
+
+#### Example 1: Simple Login Event
+
+```sql
+EXEC SP_RegistrarEvento
+    @tipEvento = 'Login',
+    @descripcion = 'Usuario ingresó al sistema',
+    @usuario = 'admin@ditzler.com',
+    @ipAddress = '192.168.1.100',
+    @modulo = 'Autenticación',
+    @severidad = 'Info';
+```
+
+#### Example 2: Tote Movement with Metadata
+
+```sql
+DECLARE @datosJSON NVARCHAR(MAX) = '{"ubicacionAnterior":"ALM-001","ubicacionNueva":"DESP-001"}';
+
+EXEC SP_RegistrarEvento
+    @toteId = 1523,
+    @tipEvento = 'Movimiento',
+    @descripcion = 'Tote movido a área de despacho',
+    @usuario = 'operador.totes@ditzler.com',
+    @datosAdicionales = @datosJSON,
+    @ipAddress = '192.168.1.105',
+    @modulo = 'Totes',
+    @accion = 'Mover',
+    @severidad = 'Info',
+    @tiempoEjecucion = 125;
+```
+
+#### Example 3: Error Event
+
+```sql
+EXEC SP_RegistrarEvento
+    @tipEvento = 'Error',
+    @descripcion = 'Fallo en conexión a base de datos',
+    @usuario = 'sistema',
+    @severidad = 'Critical',
+    @modulo = 'Database',
+    @resultadoExitoso = 0,
+    @datosAdicionales = '{"error":"Connection timeout after 30s"}';
+```
+
+#### Example 4: Application Layer (Node.js)
+
+```javascript
+const pool = await sql.connect(config);
+const result = await pool.request()
+    .input('toteId', sql.Int, toteId)
+    .input('tipEvento', sql.NVarChar(50), 'Actualización')
+    .input('descripcion', sql.NVarChar(500), 'Estado de tote actualizado')
+    .input('usuario', sql.NVarChar(255), req.session.user.email)
+    .input('ipAddress', sql.NVarChar(45), req.ip)
+    .input('userAgent', sql.NVarChar(500), req.headers['user-agent'])
+    .input('severidad', sql.NVarChar(20), 'Info')
+    .input('modulo', sql.NVarChar(50), 'Totes')
+    .input('accion', sql.NVarChar(100), 'Cambio Estado')
+    .input('tiempoEjecucion', sql.Int, Date.now() - startTime)
+    .execute('SP_RegistrarEvento');
+
+const eventoId = result.recordset[0].EventoId;
+```
+
+---
+
+## SP_ValidarLogin
+
+Validates user credentials and retrieves user information for authentication.
+
+### Syntax
+
+```sql
+CREATE PROCEDURE SP_ValidarLogin
+    @Email NVARCHAR(255),
+    @Password NVARCHAR(255)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    SELECT Id, Nombre, Apellido, Email, Rol, Estado, Preferencias
+    FROM Usuarios 
+    WHERE Email = @Email 
+      AND Password = @Password 
+      AND Estado = 'Activo';
+END
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `@Email` | NVARCHAR(255) | Yes | User email address |
+| `@Password` | NVARCHAR(255) | Yes | User password (hashed by application) |
+
+### Returns
+
+Returns a result set with user information if credentials are valid:
+- `Id` (INT) - User ID
+- `Nombre` (NVARCHAR) - First name
+- `Apellido` (NVARCHAR) - Last name
+- `Email` (NVARCHAR) - Email address
+- `Rol` (NVARCHAR) - User roles (comma-separated)
+- `Estado` (NVARCHAR) - Account status
+- `Preferencias` (NVARCHAR) - JSON preferences
+
+Returns empty result set if credentials are invalid or user is inactive.
+
+### Usage Examples
+
+#### Example 1: SQL Execution
+
+```sql
+EXEC SP_ValidarLogin 
+    @Email = 'admin@ditzler.com',
+    @Password = 'admin123';
+```
+
+#### Example 2: Application Layer (Node.js)
+
+```javascript
+const pool = await sql.connect(config);
+const result = await pool.request()
+    .input('Email', sql.NVarChar(255), email)
+    .input('Password', sql.NVarChar(255), hashedPassword)
+    .execute('SP_ValidarLogin');
+
+if (result.recordset.length > 0) {
+    const user = result.recordset[0];
+    req.session.user = {
+        id: user.Id,
+        nombre: user.Nombre,
+        apellido: user.Apellido,
+        email: user.Email,
+        rol: user.Rol.split(',').map(r => r.trim()),
+        preferencias: user.Preferencias ? JSON.parse(user.Preferencias) : {}
+    };
+    res.json({ success: true, user: req.session.user });
+} else {
+    res.status(401).json({ success: false, message: 'Credenciales inválidas' });
+}
+```
+
+<Warning>
+The stored procedure performs plain-text password comparison. Password hashing should be implemented in the application layer using bcrypt before calling this procedure.
+</Warning>
+
+---
+
+## SP_EstadisticasDashboard
+
+Calculates comprehensive dashboard statistics and KPIs.
+
+### Syntax
+
+```sql
+CREATE PROCEDURE SP_EstadisticasDashboard
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- KPI Generales
+    SELECT COUNT(*) as TotalTotes FROM Totes WHERE Activo = 1;
+    SELECT COUNT(*) as TotesDisponibles FROM Totes WHERE Activo = 1 AND Estado = 'TOTE VACIO';
+    SELECT COUNT(*) as TotesEnUso FROM Totes WHERE Activo = 1 AND Estado = 'CLIENTE';
+    SELECT COUNT(*) as TotesMantenimiento FROM Totes WHERE Activo = 1 AND Estado = 'EN MANTENCION';
+    
+    -- Fuera de Plazo
+    SELECT COUNT(*) as TotesFueraPlazo 
+    FROM Totes 
+    WHERE Activo = 1 
+      AND Estado = 'CLIENTE' 
+      AND FechaDespacho IS NOT NULL 
+      AND DATEDIFF(day, FechaDespacho, GETDATE()) >= 30;
+    
+    -- Por Vencer
+    SELECT 0 as TotesPorVencer;
+    
+    -- Distribución
+    SELECT Estado, COUNT(*) as Cantidad 
+    FROM Totes 
+    WHERE Activo = 1 
+    GROUP BY Estado;
+    
+    -- Top Clientes
+    SELECT TOP 5 Cliente, COUNT(*) as Cantidad 
+    FROM Totes 
+    WHERE Activo = 1 AND Cliente IS NOT NULL 
+    GROUP BY Cliente 
+    ORDER BY COUNT(*) DESC;
+    
+    -- Creación por mes
+    SELECT FORMAT(FechaCreacion, 'yyyy-MM') as Mes, COUNT(*) as TotesCreados 
+    FROM Totes 
+    WHERE FechaCreacion >= DATEADD(MONTH, -6, GETDATE()) 
+    GROUP BY FORMAT(FechaCreacion, 'yyyy-MM') 
+    ORDER BY Mes;
+END
+```
+
+### Parameters
+
+None - this procedure takes no parameters.
+
+### Returns
+
+Returns **multiple result sets** with different statistics:
+
+1. **Total Totes** - Total active totes
+2. **Totes Disponibles** - Available empty totes
+3. **Totes En Uso** - Totes currently with clients
+4. **Totes Mantenimiento** - Totes under maintenance
+5. **Totes Fuera de Plazo** - Totes overdue for return (30+ days)
+6. **Totes Por Vencer** - Totes near expiration (currently 0)
+7. **Distribución por Estado** - Tote count by status
+8. **Top 5 Clientes** - Top 5 clients by tote count
+9. **Creación por Mes** - Totes created per month (last 6 months)
+
+### Usage Examples
+
+#### Example 1: SQL Execution
+
+```sql
+EXEC SP_EstadisticasDashboard;
+```
+
+#### Example 2: Application Layer (Node.js)
+
+```javascript
+const pool = await sql.connect(config);
+const result = await pool.request().execute('SP_EstadisticasDashboard');
+
+const stats = {
+    totalTotes: result.recordsets[0][0].TotalTotes,
+    totesDisponibles: result.recordsets[1][0].TotesDisponibles,
+    totesEnUso: result.recordsets[2][0].TotesEnUso,
+    totesMantenimiento: result.recordsets[3][0].TotesMantenimiento,
+    totesFueraPlazo: result.recordsets[4][0].TotesFueraPlazo,
+    totesPorVencer: result.recordsets[5][0].TotesPorVencer,
+    distribucion: result.recordsets[6],
+    topClientes: result.recordsets[7],
+    creacionPorMes: result.recordsets[8]
+};
+
+res.json({ success: true, stats });
+```
+
+---
+
+## SP_CrearUsuario
+
+Creates a new user with validation to prevent duplicate emails.
+
+### Syntax
+
+```sql
+CREATE PROCEDURE SP_CrearUsuario
+    @Nombre NVARCHAR(100),
+    @Apellido NVARCHAR(100),
+    @Email NVARCHAR(255),
+    @Password NVARCHAR(255),
+    @Rol NVARCHAR(500) = 'Operador',
+    @Estado NVARCHAR(20) = 'Activo'
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    IF EXISTS (SELECT 1 FROM Usuarios WHERE Email = @Email)
+    BEGIN
+        RAISERROR('Ya existe un usuario con ese email', 16, 1);
+        RETURN;
+    END
+    
+    INSERT INTO Usuarios (Nombre, Apellido, Email, Password, Rol, Estado, FechaCreacion, FechaModificacion)
+    VALUES (@Nombre, @Apellido, @Email, @Password, @Rol, @Estado, GETDATE(), GETDATE());
+    
+    SELECT SCOPE_IDENTITY() as UsuarioId;
+END
+```
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `@Nombre` | NVARCHAR(100) | Yes | - | First name |
+| `@Apellido` | NVARCHAR(100) | Yes | - | Last name |
+| `@Email` | NVARCHAR(255) | Yes | - | Email address (must be unique) |
+| `@Password` | NVARCHAR(255) | Yes | - | Password (hashed by application) |
+| `@Rol` | NVARCHAR(500) | No | 'Operador' | User roles (comma-separated) |
+| `@Estado` | NVARCHAR(20) | No | 'Activo' | Account status |
+
+### Returns
+
+- `UsuarioId` (INT) - The ID of the newly created user
+- Raises error if email already exists
+
+### Usage Examples
+
+#### Example 1: Create Basic User
+
+```sql
+EXEC SP_CrearUsuario
+    @Nombre = 'Juan',
+    @Apellido = 'Pérez',
+    @Email = 'juan.perez@ditzler.com',
+    @Password = 'hashed_password_here',
+    @Rol = 'Operador Totes';
+```
+
+#### Example 2: Create Admin with Multiple Roles
+
+```sql
+EXEC SP_CrearUsuario
+    @Nombre = 'María',
+    @Apellido = 'González',
+    @Email = 'maria@ditzler.com',
+    @Password = 'hashed_password',
+    @Rol = 'Administrador, Operador de Llenado de Totes',
+    @Estado = 'Activo';
+```
+
+#### Example 3: Error Handling in Application
+
+```javascript
+try {
+    const result = await pool.request()
+        .input('Nombre', sql.NVarChar(100), nombre)
+        .input('Apellido', sql.NVarChar(100), apellido)
+        .input('Email', sql.NVarChar(255), email)
+        .input('Password', sql.NVarChar(255), hashedPassword)
+        .input('Rol', sql.NVarChar(500), rol)
+        .execute('SP_CrearUsuario');
+    
+    res.json({ success: true, userId: result.recordset[0].UsuarioId });
+} catch (error) {
+    if (error.message.includes('Ya existe un usuario')) {
+        res.status(400).json({ success: false, message: 'Email ya está registrado' });
+    } else {
+        res.status(500).json({ success: false, message: 'Error al crear usuario' });
+    }
+}
+```
+
+---
+
+## SP_CrearTote
+
+Creates a new tote with automatic code generation.
+
+### Syntax
+
+```sql
+CREATE PROCEDURE SP_CrearTote
+    @codigo NVARCHAR(50) = NULL,
+    @estado NVARCHAR(30) = 'TOTE VACIO',
+    @ubicacion NVARCHAR(100) = NULL,
+    @cliente NVARCHAR(255) = NULL,
+    @usuario NVARCHAR(255) = NULL,
+    @producto NVARCHAR(255) = NULL,
+    @lote NVARCHAR(100) = NULL,
+    @fechaDespacho DATETIME = NULL,
+    @alerta NVARCHAR(20) = NULL,
+    @usuarioCreacion NVARCHAR(255) = NULL,
+    @observaciones NVARCHAR(MAX) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    IF @codigo IS NULL OR @codigo = ''
+        SET @codigo = dbo.FN_GenerarCodigoTote();
+    
+    IF EXISTS (SELECT 1 FROM Totes WHERE Codigo = @codigo)
+    BEGIN
+        RAISERROR('Ya existe un tote con ese código', 16, 1);
+        RETURN;
+    END
+    
+    INSERT INTO Totes (
+        Codigo, Estado, Ubicacion, Cliente, Usuario, Producto, Lote, 
+        FechaDespacho, FechaRetorno, Peso, Alerta, UsuarioCreacion, 
+        FechaCreacion, FechaModificacion, Activo, Observaciones
+    )
+    VALUES (
+        @codigo, @estado, @ubicacion, @cliente, @usuario, @producto, @lote,
+        @fechaDespacho, NULL, NULL, @alerta, @usuarioCreacion,
+        GETDATE(), GETDATE(), 1, @observaciones
+    );
+    
+    SELECT SCOPE_IDENTITY() as ToteId, @codigo as Codigo;
+END
+```
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `@codigo` | NVARCHAR(50) | No | Auto-generated | Tote code |
+| `@estado` | NVARCHAR(30) | No | 'TOTE VACIO' | Initial status |
+| `@ubicacion` | NVARCHAR(100) | No | NULL | Initial location |
+| `@cliente` | NVARCHAR(255) | No | NULL | Assigned client |
+| `@usuario` | NVARCHAR(255) | No | NULL | Assigned operator |
+| `@producto` | NVARCHAR(255) | No | NULL | Product |
+| `@lote` | NVARCHAR(100) | No | NULL | Batch number |
+| `@fechaDespacho` | DATETIME | No | NULL | Dispatch date |
+| `@alerta` | NVARCHAR(20) | No | NULL | Alert level |
+| `@usuarioCreacion` | NVARCHAR(255) | No | NULL | Creating user |
+| `@observaciones` | NVARCHAR(MAX) | No | NULL | Notes |
+
+### Returns
+
+- `ToteId` (INT) - The ID of the newly created tote
+- `Codigo` (NVARCHAR) - The generated/assigned tote code
+
+### Usage Examples
+
+#### Example 1: Create Empty Tote with Auto Code
+
+```sql
+EXEC SP_CrearTote
+    @ubicacion = 'Almacén Principal',
+    @usuarioCreacion = 'admin@ditzler.com';
+```
+
+#### Example 2: Create Tote with Specific Code
+
+```sql
+EXEC SP_CrearTote
+    @codigo = 'TOTE-SPECIAL-001',
+    @estado = 'TOTE VACIO',
+    @ubicacion = 'Sala Llenado',
+    @observaciones = 'Tote para cliente especial',
+    @usuarioCreacion = 'admin@ditzler.com';
+```
+
+---
+
+## SP_BuscarEventos
+
+Searches and filters event logs with multiple criteria.
+
+### Syntax
+
+```sql
+CREATE PROCEDURE SP_BuscarEventos
+    @toteId INT = NULL,
+    @tipEvento NVARCHAR(50) = NULL,
+    @usuario NVARCHAR(255) = NULL,
+    @severidad NVARCHAR(20) = NULL,
+    @modulo NVARCHAR(50) = NULL,
+    @accion NVARCHAR(100) = NULL,
+    @fechaDesde DATETIME = NULL,
+    @fechaHasta DATETIME = NULL,
+    @resultadoExitoso BIT = NULL,
+    @top INT = 1000
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    SELECT TOP (@top) 
+        e.Id, e.ToteId, t.Codigo as CodigoTote, e.TipEvento, e.Descripcion, 
+        e.Usuario, e.FechaEvento, e.DatosAdicionales, e.IpAddress, e.UserAgent, 
+        e.Severidad, e.Modulo, e.Accion, e.ResultadoExitoso, e.TiempoEjecucion, e.SessionId
+    FROM Eventos e 
+    LEFT JOIN Totes t ON e.ToteId = t.Id
+    WHERE (@toteId IS NULL OR e.ToteId = @toteId)
+      AND (@tipEvento IS NULL OR e.TipEvento = @tipEvento)
+      AND (@usuario IS NULL OR e.Usuario LIKE '%' + @usuario + '%')
+      AND (@severidad IS NULL OR e.Severidad = @severidad)
+      AND (@modulo IS NULL OR e.Modulo = @modulo)
+      AND (@accion IS NULL OR e.Accion LIKE '%' + @accion + '%')
+      AND (@fechaDesde IS NULL OR e.FechaEvento >= @fechaDesde)
+      AND (@fechaHasta IS NULL OR e.FechaEvento <= @fechaHasta)
+      AND (@resultadoExitoso IS NULL OR e.ResultadoExitoso = @resultadoExitoso)
+    ORDER BY e.FechaEvento DESC;
+END
+```
+
+### Parameters
+
+All parameters are optional - omitted parameters are not used in filtering:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `@toteId` | INT | NULL | Filter by specific tote |
+| `@tipEvento` | NVARCHAR(50) | NULL | Filter by event type |
+| `@usuario` | NVARCHAR(255) | NULL | Filter by user (partial match) |
+| `@severidad` | NVARCHAR(20) | NULL | Filter by severity level |
+| `@modulo` | NVARCHAR(50) | NULL | Filter by system module |
+| `@accion` | NVARCHAR(100) | NULL | Filter by action (partial match) |
+| `@fechaDesde` | DATETIME | NULL | Start date filter |
+| `@fechaHasta` | DATETIME | NULL | End date filter |
+| `@resultadoExitoso` | BIT | NULL | Filter by success status |
+| `@top` | INT | 1000 | Maximum records to return |
+
+### Usage Examples
+
+#### Example 1: Get Recent Errors
+
+```sql
+EXEC SP_BuscarEventos
+    @severidad = 'Error',
+    @fechaDesde = '2026-03-01',
+    @top = 50;
+```
+
+#### Example 2: Tote Movement History
+
+```sql
+EXEC SP_BuscarEventos
+    @toteId = 1523,
+    @tipEvento = 'Movimiento',
+    @top = 100;
+```
+
+#### Example 3: User Activity Audit
+
+```sql
+EXEC SP_BuscarEventos
+    @usuario = 'admin@ditzler.com',
+    @fechaDesde = '2026-03-01',
+    @fechaHasta = '2026-03-31';
+```
+
+---
+
+## SP_LimpiarEventosAntiguos
+
+Deletes events older than specified days for database maintenance.
+
+### Syntax
+
+```sql
+CREATE PROCEDURE SP_LimpiarEventosAntiguos
+    @diasAntiguedad INT = 365
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @fechaLimite DATETIME = DATEADD(DAY, -@diasAntiguedad, GETDATE());
+    DECLARE @eventosEliminados INT;
+    
+    DELETE FROM Eventos WHERE FechaEvento < @fechaLimite;
+    
+    SET @eventosEliminados = @@ROWCOUNT;
+    
+    SELECT @eventosEliminados as EventosEliminados, @fechaLimite as FechaLimite;
+END
+```
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `@diasAntiguedad` | INT | No | 365 | Delete events older than this many days |
+
+### Returns
+
+- `EventosEliminados` (INT) - Number of events deleted
+- `FechaLimite` (DATETIME) - Cutoff date used for deletion
+
+### Usage Examples
+
+#### Example 1: Clean 1-Year-Old Events
+
+```sql
+EXEC SP_LimpiarEventosAntiguos @diasAntiguedad = 365;
+```
+
+#### Example 2: Clean 90-Day-Old Events
+
+```sql
+EXEC SP_LimpiarEventosAntiguos @diasAntiguedad = 90;
+```
+
+#### Example 3: Scheduled Maintenance Job
+
+```sql
+-- Run monthly to clean up events older than 1 year
+USE Ditzler;
+GO
+
+DECLARE @result TABLE (EventosEliminados INT, FechaLimite DATETIME);
+
+INSERT INTO @result
+EXEC SP_LimpiarEventosAntiguos @diasAntiguedad = 365;
+
+SELECT * FROM @result;
+```
+
+<Warning>
+This operation is **irreversible**. Ensure you have proper backups before running this procedure, especially in production environments.
+</Warning>
+
+## Best Practices
+
+### Error Handling
+
+Always use TRY-CATCH blocks when calling stored procedures from application code:
+
+```javascript
+try {
+    const result = await pool.request()
+        .input('param1', sql.Type, value)
+        .execute('ProcedureName');
+    // Handle success
+} catch (error) {
+    console.error('Database error:', error.message);
+    // Handle error appropriately
+}
+```
+
+### Performance Tips
+
+1. Use `SET NOCOUNT ON` to reduce network traffic
+2. Implement proper indexing on filtered columns
+3. Limit result sets with `@top` parameters
+4. Use transactions for multi-step operations
+
+### Security Considerations
+
+1. Always use parameterized queries
+2. Validate input in application layer before calling procedures
+3. Implement proper access control at database level
+4. Hash passwords in application layer, not in database

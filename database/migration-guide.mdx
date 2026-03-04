@@ -1,0 +1,527 @@
+---
+title: Database Migration Guide
+description: Complete guide for running database migrations in DitzlerTotes, including installation procedures, schema updates, and troubleshooting
+---
+
+## Overview
+
+The DitzlerTotes database uses SQL Server 2016+ and includes a comprehensive migration system with master installation scripts and incremental updates. This guide covers installation, schema updates, and best practices for database migrations.
+
+## Prerequisites
+
+Before running any migrations, ensure you have:
+
+- **SQL Server** 2016 or higher
+- **Database permissions** to create databases, tables, and stored procedures
+- **Backup capability** for production environments
+- **Connection configured** in `.env` file
+
+```env
+DB_USER=usuario_sql
+DB_PASSWORD=contraseña_sql
+DB_DATABASE=Ditzler
+DB_SERVER=localhost
+DB_PORT=1433
+```
+
+## Initial Installation
+
+<Steps>
+
+### Execute Master Installation Script
+
+For new installations, use the master script that creates the entire database structure:
+
+```sql
+-- Run from SQL Server Management Studio or sqlcmd
+USE master;
+GO
+
+-- Execute the master installation script
+-- This will be in ~/workspace/source/docs/DitzlerDB_Master.sql
+```
+
+The master script performs:
+- Creates the `Ditzler` database if it doesn't exist
+- Creates all 7 core tables (Usuarios, Clientes, Totes, Eventos, Productos, Ubicaciones, Llenados_Totes)
+- Creates 3 utility functions (FN_GenerarCodigoTote, FN_DiasHastaVencimiento, FN_GenerarCodigoSeguimiento)
+- Creates 6+ stored procedures for core operations
+- Inserts default users and operational locations
+
+### Verify Database Creation
+
+After running the master script, verify the installation:
+
+```sql
+-- Check database exists
+SELECT name FROM sys.databases WHERE name = 'Ditzler';
+
+-- Verify all tables are created
+USE Ditzler;
+SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE';
+
+-- Should return: Usuarios, Clientes, Totes, Eventos, Productos, Ubicaciones, Llenados_Totes
+```
+
+### Test Database Connection
+
+From your Node.js application:
+
+```bash
+# Test the connection using the API endpoint
+curl http://localhost:3000/api/test-db-connection
+```
+
+Expected response:
+```json
+{
+  "success": true,
+  "message": "Database connection successful"
+}
+```
+
+</Steps>
+
+## Running Incremental Migrations
+
+<Steps>
+
+### Backup Your Database
+
+Always create a backup before running migrations:
+
+```sql
+BACKUP DATABASE Ditzler 
+TO DISK = 'C:\\Backups\\Ditzler_Before_Migration.bak'
+WITH FORMAT, INIT, COMPRESSION;
+
+PRINT '✅ Backup created successfully';
+```
+
+### Execute Migration Scripts
+
+Run migration scripts in the following order:
+
+#### Migration 1: Move FechaVencimiento to Products
+
+This migration moves the expiration date from individual totes to the product level:
+
+```sql
+USE Ditzler;
+GO
+
+-- Run ~/workspace/source/docs/migrate_fecha_vencimiento.sql
+
+PRINT '🔄 Initiating FechaVencimiento migration...';
+
+-- Step 1: Add FechaVencimiento to Productos table
+IF NOT EXISTS (SELECT * FROM sys.columns 
+               WHERE object_id = OBJECT_ID('Productos') 
+               AND name = 'FechaVencimiento')
+BEGIN
+    ALTER TABLE Productos ADD FechaVencimiento DATETIME NULL;
+    PRINT '✅ Column FechaVencimiento added to Productos.';
+END
+
+-- Step 2: Drop indexes on Totes.FechaVencimiento
+IF EXISTS (SELECT * FROM sys.indexes 
+           WHERE name = 'IX_Totes_FechaVencimiento' 
+           AND object_id = OBJECT_ID('Totes'))
+BEGIN
+    DROP INDEX IX_Totes_FechaVencimiento ON Totes;
+    PRINT '✅ Index IX_Totes_FechaVencimiento dropped.';
+END
+
+-- Step 3: Remove FechaVencimiento and FechaEnvasado from Totes
+IF EXISTS (SELECT * FROM sys.columns 
+           WHERE object_id = OBJECT_ID('Totes') 
+           AND name = 'FechaVencimiento')
+BEGIN
+    ALTER TABLE Totes DROP COLUMN FechaVencimiento;
+    PRINT '✅ Column FechaVencimiento removed from Totes.';
+END
+
+IF EXISTS (SELECT * FROM sys.columns 
+           WHERE object_id = OBJECT_ID('Totes') 
+           AND name = 'FechaEnvasado')
+BEGIN
+    ALTER TABLE Totes DROP COLUMN FechaEnvasado;
+    PRINT '✅ Column FechaEnvasado removed from Totes.';
+END
+
+PRINT '✅ Migration completed successfully.';
+```
+
+#### Migration 2: Add FechaRetorno Column
+
+This migration adds automatic return date calculation (30 days after dispatch):
+
+```sql
+USE Ditzler;
+GO
+
+-- Run ~/workspace/source/docs/add_fecha_retorno.sql
+
+PRINT '🚀 Initiating FechaRetorno addition...';
+
+-- Step 1: Add FechaRetorno column
+IF NOT EXISTS (SELECT * FROM sys.columns 
+               WHERE object_id = OBJECT_ID('dbo.Totes') 
+               AND name = 'FechaRetorno')
+BEGIN
+    ALTER TABLE dbo.Totes ADD FechaRetorno DATETIME NULL;
+    PRINT '✅ Column FechaRetorno added to Totes.';
+END
+
+-- Step 2: Calculate FechaRetorno for existing records
+UPDATE dbo.Totes
+SET FechaRetorno = DATEADD(day, 30, FechaDespacho)
+WHERE FechaDespacho IS NOT NULL 
+  AND FechaRetorno IS NULL;
+
+DECLARE @RowsUpdated INT = @@ROWCOUNT;
+PRINT '✅ ' + CAST(@RowsUpdated AS VARCHAR(10)) + ' records updated with FechaRetorno.';
+
+-- Verification
+SELECT TOP 5 
+    Codigo,
+    FORMAT(FechaDespacho, 'dd/MM/yyyy') as FechaDespacho,
+    FORMAT(FechaRetorno, 'dd/MM/yyyy') as FechaRetorno,
+    DATEDIFF(day, FechaDespacho, FechaRetorno) as DiasRetorno
+FROM dbo.Totes
+WHERE FechaDespacho IS NOT NULL
+ORDER BY FechaDespacho DESC;
+```
+
+### Verify Migration Success
+
+After each migration, verify the changes:
+
+```sql
+-- Check schema changes
+SELECT 
+    TABLE_NAME,
+    COLUMN_NAME,
+    DATA_TYPE,
+    IS_NULLABLE
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME IN ('Totes', 'Productos')
+  AND COLUMN_NAME IN ('FechaVencimiento', 'FechaRetorno', 'FechaEnvasado')
+ORDER BY TABLE_NAME, ORDINAL_POSITION;
+
+-- Verify data integrity
+SELECT 
+    'Totes with FechaRetorno' as Metric,
+    COUNT(*) as Count
+FROM Totes
+WHERE FechaRetorno IS NOT NULL
+UNION ALL
+SELECT 
+    'Products with FechaVencimiento' as Metric,
+    COUNT(*) as Count
+FROM Productos
+WHERE FechaVencimiento IS NOT NULL;
+```
+
+</Steps>
+
+## Migration Best Practices
+
+### Pre-Migration Checklist
+
+- ✅ **Backup database** before any schema changes
+- ✅ **Test in development** environment first
+- ✅ **Review migration script** for potential conflicts
+- ✅ **Check disk space** for large table operations
+- ✅ **Schedule downtime** for production migrations
+- ✅ **Notify users** of maintenance window
+
+### During Migration
+
+<Warning>
+  Always run migrations during low-traffic periods to minimize impact on users.
+</Warning>
+
+```sql
+-- Enable transaction mode for rollback capability
+BEGIN TRANSACTION;
+
+-- Run your migration script here
+-- ...
+
+-- If everything looks good:
+COMMIT TRANSACTION;
+PRINT '✅ Migration committed successfully';
+
+-- If there are issues:
+-- ROLLBACK TRANSACTION;
+-- PRINT '❌ Migration rolled back';
+```
+
+### Post-Migration
+
+- ✅ **Verify schema changes** are applied correctly
+- ✅ **Test application functionality** thoroughly
+- ✅ **Check stored procedures** still work
+- ✅ **Monitor performance** for any degradation
+- ✅ **Update indexes** if needed
+
+```sql
+-- Update statistics after major schema changes
+EXEC sp_updatestats;
+
+-- Rebuild indexes if necessary
+ALTER INDEX ALL ON Totes REBUILD;
+ALTER INDEX ALL ON Productos REBUILD;
+```
+
+## Common Migration Scenarios
+
+### Adding a New Column
+
+```sql
+-- Check if column exists before adding
+IF NOT EXISTS (
+    SELECT * FROM sys.columns 
+    WHERE object_id = OBJECT_ID('TableName') 
+    AND name = 'NewColumn'
+)
+BEGIN
+    ALTER TABLE TableName ADD NewColumn DATATYPE NULL;
+    PRINT '✅ Column NewColumn added.';
+END
+ELSE
+    PRINT '⚠️ Column NewColumn already exists.';
+```
+
+### Removing a Column
+
+```sql
+-- Drop dependent indexes first
+IF EXISTS (
+    SELECT * FROM sys.indexes 
+    WHERE name = 'IX_TableName_ColumnName' 
+    AND object_id = OBJECT_ID('TableName')
+)
+BEGIN
+    DROP INDEX IX_TableName_ColumnName ON TableName;
+    PRINT '✅ Index dropped.';
+END
+
+-- Drop dependent constraints
+DECLARE @ConstraintName NVARCHAR(200);
+SELECT @ConstraintName = name 
+FROM sys.check_constraints 
+WHERE parent_object_id = OBJECT_ID('TableName') 
+  AND definition LIKE '%ColumnName%';
+
+IF @ConstraintName IS NOT NULL
+BEGIN
+    EXEC('ALTER TABLE TableName DROP CONSTRAINT ' + @ConstraintName);
+    PRINT '✅ Constraint dropped.';
+END
+
+-- Finally drop the column
+IF EXISTS (
+    SELECT * FROM sys.columns 
+    WHERE object_id = OBJECT_ID('TableName') 
+    AND name = 'ColumnName'
+)
+BEGIN
+    ALTER TABLE TableName DROP COLUMN ColumnName;
+    PRINT '✅ Column ColumnName removed.';
+END
+```
+
+### Renaming a Column
+
+```sql
+-- Rename column using sp_rename
+IF EXISTS(
+    SELECT * FROM sys.columns 
+    WHERE object_id = OBJECT_ID('TableName') 
+    AND name = 'OldColumnName'
+)
+AND NOT EXISTS(
+    SELECT * FROM sys.columns 
+    WHERE object_id = OBJECT_ID('TableName') 
+    AND name = 'NewColumnName'
+)
+BEGIN
+    EXEC sp_rename 'TableName.OldColumnName', 'NewColumnName', 'COLUMN';
+    PRINT '✅ Column renamed from OldColumnName to NewColumnName.';
+END
+```
+
+## Rollback Procedures
+
+If a migration fails or causes issues:
+
+<Steps>
+
+### Stop the Application
+
+```bash
+# Stop the Node.js server
+npm stop
+# or kill the process
+pkill -f "node server.js"
+```
+
+### Restore from Backup
+
+```sql
+USE master;
+GO
+
+-- Set database to single user mode
+ALTER DATABASE Ditzler SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+GO
+
+-- Restore from backup
+RESTORE DATABASE Ditzler 
+FROM DISK = 'C:\\Backups\\Ditzler_Before_Migration.bak'
+WITH REPLACE;
+GO
+
+-- Set back to multi-user mode
+ALTER DATABASE Ditzler SET MULTI_USER;
+GO
+
+PRINT '✅ Database restored from backup';
+```
+
+### Verify Restoration
+
+```sql
+-- Check database consistency
+DBCC CHECKDB('Ditzler');
+
+-- Verify table structure
+SELECT TABLE_NAME, TABLE_TYPE 
+FROM INFORMATION_SCHEMA.TABLES;
+```
+
+### Restart Application
+
+```bash
+# Restart the server
+npm start
+```
+
+</Steps>
+
+## Troubleshooting
+
+### Migration Script Won't Run
+
+**Problem**: Script fails with permission errors
+
+**Solution**: Ensure your SQL user has necessary permissions:
+
+```sql
+-- Grant required permissions
+USE Ditzler;
+GRANT ALTER ON DATABASE::Ditzler TO [your_user];
+GRANT ALTER ON SCHEMA::dbo TO [your_user];
+```
+
+### Column Already Exists Error
+
+**Problem**: Migration tries to add a column that already exists
+
+**Solution**: All migration scripts should check for existence first:
+
+```sql
+IF NOT EXISTS (
+    SELECT * FROM sys.columns 
+    WHERE object_id = OBJECT_ID('TableName') 
+    AND name = 'ColumnName'
+)
+BEGIN
+    -- Add column
+END
+ELSE
+    PRINT '⚠️ Column already exists. Skipping.';
+```
+
+### Foreign Key Constraint Violations
+
+**Problem**: Cannot drop column due to foreign key constraints
+
+**Solution**: Drop constraints first, then the column:
+
+```sql
+-- Find and drop foreign key constraints
+DECLARE @SQL NVARCHAR(MAX) = '';
+
+SELECT @SQL = @SQL + 'ALTER TABLE ' + OBJECT_NAME(parent_object_id) 
+    + ' DROP CONSTRAINT ' + name + ';'
+FROM sys.foreign_keys
+WHERE referenced_object_id = OBJECT_ID('TableName');
+
+EXEC sp_executesql @SQL;
+```
+
+### Index Rebuild Failures
+
+**Problem**: Index rebuild fails due to insufficient disk space
+
+**Solution**: Rebuild indexes one at a time:
+
+```sql
+-- Rebuild specific index
+ALTER INDEX IX_IndexName ON TableName REBUILD;
+
+-- Or reorganize instead (requires less space)
+ALTER INDEX IX_IndexName ON TableName REORGANIZE;
+```
+
+## Performance Considerations
+
+### Large Table Migrations
+
+For tables with millions of rows:
+
+```sql
+-- Add column with default value in batches
+ALTER TABLE LargeTable ADD NewColumn INT NULL;
+
+-- Update in batches to avoid transaction log overflow
+DECLARE @BatchSize INT = 10000;
+DECLARE @RowsAffected INT = 1;
+
+WHILE @RowsAffected > 0
+BEGIN
+    UPDATE TOP (@BatchSize) LargeTable
+    SET NewColumn = 0
+    WHERE NewColumn IS NULL;
+    
+    SET @RowsAffected = @@ROWCOUNT;
+    PRINT 'Updated ' + CAST(@RowsAffected AS VARCHAR(10)) + ' rows';
+    
+    -- Small delay to allow log truncation
+    WAITFOR DELAY '00:00:01';
+END
+```
+
+### Monitoring Migration Progress
+
+```sql
+-- Monitor long-running operations
+SELECT 
+    session_id,
+    command,
+    percent_complete,
+    estimated_completion_time/1000/60 as EstimatedMinutesRemaining,
+    start_time
+FROM sys.dm_exec_requests
+WHERE command LIKE 'ALTER%' OR command LIKE 'CREATE%';
+```
+
+## Additional Resources
+
+- See [Version History](/database/version-history) for complete changelog
+- Review database structure in source/docs/DitzlerDB_Master.sql
+- Check migration scripts in source/docs/ directory
+- Database README: source/database/README.md (if available)

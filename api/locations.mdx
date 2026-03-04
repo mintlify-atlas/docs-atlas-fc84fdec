@@ -1,0 +1,563 @@
+---
+title: 'Location Management'
+description: 'API endpoints for managing warehouse locations including querying by area and administrative CRUD operations'
+---
+
+## Get Locations by Area
+
+Retrieve active locations, optionally filtered by area. This endpoint is used by operators to select valid destinations.
+
+```http
+GET /api/ubicaciones
+```
+
+### Query Parameters
+
+<ParamField query="area" type="string">
+  Filter by area name. Can be comma-separated for multiple areas (e.g., "Despacho,Produccion")
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="ubicaciones" type="array" required>
+  Array of location objects
+  
+  <ResponseField name="Id" type="integer">
+    Unique location identifier
+  </ResponseField>
+  
+  <ResponseField name="Nombre" type="string">
+    Location name
+  </ResponseField>
+  
+  <ResponseField name="Codigo" type="string">
+    Location code
+  </ResponseField>
+  
+  <ResponseField name="Tipo" type="string">
+    Location type (e.g., "Almacen", "Produccion", "Despacho")
+  </ResponseField>
+  
+  <ResponseField name="Area" type="string">
+    Area/zone the location belongs to
+  </ResponseField>
+  
+  <ResponseField name="Capacidad" type="integer">
+    Maximum capacity (number of totes)
+  </ResponseField>
+</ResponseField>
+
+### Example Request (All Active Locations)
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/ubicaciones" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Request (Filtered by Area)
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/ubicaciones?area=Despacho,Produccion" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "ubicaciones": [
+    {
+      "Id": 1,
+      "Nombre": "Almacenamiento",
+      "Codigo": "ALM-001",
+      "Tipo": "Almacen",
+      "Area": "Almacenamiento",
+      "Capacidad": 100
+    },
+    {
+      "Id": 2,
+      "Nombre": "Retail",
+      "Codigo": "RET-001",
+      "Tipo": "Despacho",
+      "Area": "Despacho",
+      "Capacidad": 50
+    },
+    {
+      "Id": 3,
+      "Nombre": "Lavado",
+      "Codigo": "LAV-001",
+      "Tipo": "Mantencion",
+      "Area": "Mantencion",
+      "Capacidad": 30
+    }
+  ]
+}
+```
+
+---
+
+## Location Admin Actions
+
+Administrative CRUD operations for location management. All admin endpoints require authentication.
+
+```http
+POST /api/admin/ubicaciones
+```
+
+### Authentication
+
+All requests must include a valid JWT token in the Authorization header:
+
+```
+Authorization: Bearer YOUR_ADMIN_TOKEN
+```
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Action to perform: "create", "list", "update", or "delete"
+</ParamField>
+
+<ParamField body="locationData" type="object">
+  Location data object (required for create, update, and delete actions)
+</ParamField>
+
+---
+
+## List Locations (Admin)
+
+Retrieve all locations with current tote counts.
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Set to "list"
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="ubicaciones" type="array" required>
+  Array of location objects with additional administrative fields
+  
+  <ResponseField name="Id" type="integer">
+    Unique location identifier
+  </ResponseField>
+  
+  <ResponseField name="Nombre" type="string">
+    Location name
+  </ResponseField>
+  
+  <ResponseField name="Descripcion" type="string">
+    Location description
+  </ResponseField>
+  
+  <ResponseField name="Codigo" type="string">
+    Location code
+  </ResponseField>
+  
+  <ResponseField name="Tipo" type="string">
+    Location type
+  </ResponseField>
+  
+  <ResponseField name="Area" type="string">
+    Area/zone
+  </ResponseField>
+  
+  <ResponseField name="Capacidad" type="integer">
+    Maximum capacity
+  </ResponseField>
+  
+  <ResponseField name="Estado" type="string">
+    Location status ("Activo" or "Inactivo")
+  </ResponseField>
+  
+  <ResponseField name="ClientesAsignados" type="string">
+    Comma-separated list of assigned clients
+  </ResponseField>
+  
+  <ResponseField name="TotesActuales" type="integer">
+    Current number of active totes at this location
+  </ResponseField>
+  
+  <ResponseField name="FechaCreacion" type="datetime">
+    Creation timestamp
+  </ResponseField>
+  
+  <ResponseField name="FechaModificacion" type="datetime">
+    Last modification timestamp
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.ditzlertotes.com/api/admin/ubicaciones" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "list"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "ubicaciones": [
+    {
+      "Id": 1,
+      "Nombre": "Almacenamiento",
+      "Descripcion": "Área de almacenamiento principal",
+      "Codigo": "ALM-001",
+      "Tipo": "Almacen",
+      "Area": "Almacenamiento",
+      "Capacidad": 100,
+      "Estado": "Activo",
+      "ClientesAsignados": "",
+      "TotesActuales": 45,
+      "FechaCreacion": "2024-01-01T00:00:00",
+      "FechaModificacion": "2024-01-15T10:30:00"
+    }
+  ]
+}
+```
+
+---
+
+## Create Location
+
+Create a new location in the system.
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Set to "create"
+</ParamField>
+
+<ParamField body="locationData" type="object" required>
+  Location information object
+</ParamField>
+
+### LocationData Fields
+
+<ParamField body="locationData.nombre" type="string" required>
+  Location name (must be unique)
+</ParamField>
+
+<ParamField body="locationData.descripcion" type="string">
+  Location description
+</ParamField>
+
+<ParamField body="locationData.codigo" type="string">
+  Location code
+</ParamField>
+
+<ParamField body="locationData.tipo" type="string">
+  Location type (e.g., "Almacen", "Produccion", "Despacho", "Mantencion")
+</ParamField>
+
+<ParamField body="locationData.area" type="string">
+  Area/zone (defaults to "General")
+</ParamField>
+
+<ParamField body="locationData.capacidad" type="integer">
+  Maximum tote capacity
+</ParamField>
+
+<ParamField body="locationData.clientesAsignados" type="string">
+  Comma-separated list of assigned clients
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the location was created successfully
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Confirmation or error message
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.ditzlertotes.com/api/admin/ubicaciones" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "create",
+    "locationData": {
+      "nombre": "Zona Expedición B",
+      "descripcion": "Segunda zona de expedición",
+      "codigo": "EXP-B-001",
+      "tipo": "Despacho",
+      "area": "Expedicion",
+      "capacidad": 40,
+      "clientesAsignados": "Retail"
+    }
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "message": "Ubicación creada correctamente"
+}
+```
+
+### Error Response
+
+```json
+{
+  "success": false,
+  "message": "Ya existe una ubicación con ese nombre"
+}
+```
+
+---
+
+## Update Location
+
+Update an existing location.
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Set to "update"
+</ParamField>
+
+<ParamField body="locationData" type="object" required>
+  Location information object
+</ParamField>
+
+### LocationData Fields
+
+<ParamField body="locationData.id" type="integer" required>
+  Location ID to update
+</ParamField>
+
+<ParamField body="locationData.nombre" type="string" required>
+  Location name
+</ParamField>
+
+<ParamField body="locationData.descripcion" type="string">
+  Location description
+</ParamField>
+
+<ParamField body="locationData.codigo" type="string">
+  Location code
+</ParamField>
+
+<ParamField body="locationData.tipo" type="string">
+  Location type
+</ParamField>
+
+<ParamField body="locationData.area" type="string">
+  Area/zone
+</ParamField>
+
+<ParamField body="locationData.capacidad" type="integer">
+  Maximum capacity
+</ParamField>
+
+<ParamField body="locationData.clientesAsignados" type="string">
+  Assigned clients
+</ParamField>
+
+<ParamField body="locationData.estado" type="string" required>
+  Location status ("Activo" or "Inactivo")
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the location was updated successfully
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Confirmation or error message
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.ditzlertotes.com/api/admin/ubicaciones" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "update",
+    "locationData": {
+      "id": 5,
+      "nombre": "Zona Expedición B",
+      "descripcion": "Segunda zona de expedición - Ampliada",
+      "codigo": "EXP-B-001",
+      "tipo": "Despacho",
+      "area": "Expedicion",
+      "capacidad": 60,
+      "clientesAsignados": "Retail, Helados",
+      "estado": "Activo"
+    }
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "message": "Ubicación actualizada correctamente"
+}
+```
+
+### Error Responses
+
+```json
+{
+  "success": false,
+  "message": "Ya existe otra ubicación con ese nombre"
+}
+```
+
+```json
+{
+  "success": false,
+  "message": "Ubicación no encontrada"
+}
+```
+
+---
+
+## Delete Location
+
+Delete a location from the system. The location cannot be deleted if it has active totes assigned.
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Set to "delete"
+</ParamField>
+
+<ParamField body="locationData" type="object" required>
+  Object containing the location ID
+</ParamField>
+
+### LocationData Fields
+
+<ParamField body="locationData.id" type="integer" required>
+  Location ID to delete
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the location was deleted successfully
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Confirmation or error message
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.ditzlertotes.com/api/admin/ubicaciones" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "delete",
+    "locationData": {
+      "id": 8
+    }
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "message": "Ubicación eliminada correctamente"
+}
+```
+
+### Error Responses
+
+```json
+{
+  "success": false,
+  "message": "Ubicación no encontrada"
+}
+```
+
+```json
+{
+  "success": false,
+  "message": "No se puede eliminar la ubicación \"Almacenamiento\" porque tiene 45 tote(s) asignado(s)."
+}
+```
+
+---
+
+## Error Handling
+
+All endpoints return consistent error responses:
+
+### Authentication Error (401)
+
+```json
+{
+  "success": false,
+  "message": "No autorizado"
+}
+```
+
+### Validation Error (400)
+
+```json
+{
+  "success": false,
+  "message": "Datos de ubicación requeridos"
+}
+```
+
+```json
+{
+  "success": false,
+  "message": "ID de ubicación requerido"
+}
+```
+
+```json
+{
+  "success": false,
+  "message": "Acción no válida"
+}
+```
+
+### Server Error (500)
+
+```json
+{
+  "success": false,
+  "message": "Error al obtener ubicaciones"
+}
+```
+
+```json
+{
+  "success": false,
+  "message": "Error al conectar con la base de datos."
+}
+```

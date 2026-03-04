@@ -1,0 +1,588 @@
+---
+title: 'Error Handling'
+description: 'Comprehensive guide to error responses, status codes, and proper error handling in the DitzlerTotes API'
+---
+
+## Overview
+
+The DitzlerTotes API uses standard HTTP status codes and provides detailed error messages to help you diagnose and handle errors effectively. All error responses follow a consistent JSON structure.
+
+## Error Response Format
+
+All error responses include the following fields:
+
+```json
+{
+  "success": false,
+  "message": "Human-readable error description",
+  "error": "Detailed technical error message (optional)"
+}
+```
+
+<ResponseField name="success" type="boolean">
+  Always `false` for error responses
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  User-friendly error message describing what went wrong
+</ResponseField>
+
+<ResponseField name="error" type="string" optional>
+  Technical error details (included for 500-level errors)
+</ResponseField>
+
+## HTTP Status Codes
+
+The API uses standard HTTP status codes to indicate success or failure.
+
+### 2xx Success Codes
+
+<ResponseField name="200 OK" type="success">
+  Request completed successfully
+  
+  ```json
+  {
+    "success": true,
+    "data": { /* response data */ }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="201 Created" type="success">
+  Resource created successfully
+  
+  ```json
+  {
+    "success": true,
+    "message": "Tote creado exitosamente",
+    "id": 12345
+  }
+  ```
+</ResponseField>
+
+### 4xx Client Error Codes
+
+<ResponseField name="400 Bad Request" type="error">
+  Invalid request parameters or malformed data
+  
+  **Common causes:**
+  - Missing required fields
+  - Invalid data types
+  - Malformed JSON
+  - Validation errors
+  
+  **Example:**
+  ```json
+  {
+    "success": false,
+    "message": "Preferencias inválidas"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized" type="error">
+  Missing or invalid authentication credentials
+  
+  **Common causes:**
+  - No Authorization header provided
+  - Invalid login credentials
+  - Missing authentication token
+  
+  **Example:**
+  ```json
+  {
+    "success": false,
+    "message": "Token de autenticación requerido"
+  }
+  ```
+  
+  **Solution:** Include valid JWT token in Authorization header
+</ResponseField>
+
+<ResponseField name="403 Forbidden" type="error">
+  Valid credentials but insufficient permissions
+  
+  **Common causes:**
+  - Expired JWT token
+  - Invalid token signature
+  - Insufficient role permissions
+  - User lacks admin privileges
+  
+  **Example:**
+  ```json
+  {
+    "success": false,
+    "message": "Token inválido o expirado"
+  }
+  ```
+  
+  **Solution:** Re-authenticate to get a new token
+</ResponseField>
+
+<ResponseField name="404 Not Found" type="error">
+  Requested resource does not exist
+  
+  **Common causes:**
+  - Invalid ID in request
+  - Resource was deleted
+  - Incorrect endpoint URL
+  
+  **Example:**
+  ```json
+  {
+    "success": false,
+    "message": "Usuario no encontrado"
+  }
+  ```
+</ResponseField>
+
+### 5xx Server Error Codes
+
+<ResponseField name="500 Internal Server Error" type="error">
+  Unexpected server error during request processing
+  
+  **Common causes:**
+  - Database connection failure
+  - Unhandled exception
+  - Server misconfiguration
+  
+  **Example:**
+  ```json
+  {
+    "success": false,
+    "message": "Error interno del servidor durante el login.",
+    "error": "Connection timeout: Unable to connect to database"
+  }
+  ```
+  
+  **Solution:** Retry request, contact support if persistent
+</ResponseField>
+
+## Common Error Scenarios
+
+### Authentication Errors
+
+#### Missing Authorization Header
+
+<CodeGroup>
+```bash Request
+curl -X GET "http://localhost:3000/api/totes"
+```
+
+```json Response (401)
+{
+  "success": false,
+  "message": "Token de autenticación requerido"
+}
+```
+</CodeGroup>
+
+**Fix:** Include the Authorization header:
+
+```bash
+curl -X GET "http://localhost:3000/api/totes" \
+  -H "Authorization: Bearer <your-token>"
+```
+
+#### Expired Token
+
+<CodeGroup>
+```bash Request
+curl -X GET "http://localhost:3000/api/totes" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+```
+
+```json Response (403)
+{
+  "success": false,
+  "message": "Token inválido o expirado"
+}
+```
+</CodeGroup>
+
+**Fix:** Re-authenticate to get a new token:
+
+```bash
+curl -X POST "http://localhost:3000/api/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"password"}'
+```
+
+#### Invalid Credentials
+
+<CodeGroup>
+```bash Request
+curl -X POST "http://localhost:3000/api/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"wrong-password"}'
+```
+
+```json Response (401)
+{
+  "success": false,
+  "message": "Credenciales inválidas"
+}
+```
+</CodeGroup>
+
+### Validation Errors
+
+#### Missing Required Fields
+
+<CodeGroup>
+```bash Request
+curl -X PUT "http://localhost:3000/api/user/preferences" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+```json Response (400)
+{
+  "success": false,
+  "message": "Preferencias inválidas"
+}
+```
+</CodeGroup>
+
+#### Invalid Data Type
+
+<CodeGroup>
+```bash Request
+curl -X PUT "http://localhost:3000/api/admin/user-preferences" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"not-a-number","preferences":{}}'
+```
+
+```json Response (400)
+{
+  "success": false,
+  "message": "Se requiere el ID del usuario"
+}
+```
+</CodeGroup>
+
+### Permission Errors
+
+#### Insufficient Privileges
+
+<CodeGroup>
+```bash Request
+curl -X PUT "http://localhost:3000/api/admin/user-preferences" \
+  -H "Authorization: Bearer <non-admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"userId":15,"preferences":{}}'
+```
+
+```json Response (403)
+{
+  "success": false,
+  "message": "Acceso denegado. Se requiere rol de administrador."
+}
+```
+</CodeGroup>
+
+### Resource Not Found
+
+<CodeGroup>
+```bash Request
+curl -X GET "http://localhost:3000/api/user/preferences" \
+  -H "Authorization: Bearer <token-for-deleted-user>"
+```
+
+```json Response (404)
+{
+  "success": false,
+  "message": "Usuario no encontrado"
+}
+```
+</CodeGroup>
+
+### Server Errors
+
+#### Database Connection Error
+
+<CodeGroup>
+```bash Request
+curl -X POST "http://localhost:3000/api/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"password"}'
+```
+
+```json Response (500)
+{
+  "success": false,
+  "message": "Error interno del servidor durante el login.",
+  "error": "ConnectionError: Failed to connect to MSSQL database"
+}
+```
+</CodeGroup>
+
+## Error Handling Best Practices
+
+### Client-Side Implementation
+
+<CodeGroup>
+```javascript JavaScript
+async function makeApiRequest(endpoint, options = {}) {
+  try {
+    const response = await fetch(endpoint, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`,
+        ...options.headers
+      }
+    });
+
+    const data = await response.json();
+
+    // Handle different status codes
+    if (response.status === 401) {
+      // Redirect to login
+      window.location.href = '/login';
+      throw new Error('Authentication required');
+    }
+
+    if (response.status === 403) {
+      // Token expired, try to refresh
+      await refreshToken();
+      // Retry request
+      return makeApiRequest(endpoint, options);
+    }
+
+    if (response.status === 404) {
+      throw new Error('Resource not found');
+    }
+
+    if (response.status >= 500) {
+      // Server error, log and notify user
+      console.error('Server error:', data);
+      showNotification('Server error, please try again later');
+      throw new Error('Server error');
+    }
+
+    if (!data.success) {
+      throw new Error(data.message || 'Request failed');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('API request failed:', error);
+    throw error;
+  }
+}
+
+// Usage
+try {
+  const data = await makeApiRequest('http://localhost:3000/api/totes');
+  console.log('Totes:', data);
+} catch (error) {
+  console.error('Failed to fetch totes:', error.message);
+}
+```
+
+```python Python
+import requests
+import time
+
+def make_api_request(endpoint, method='GET', data=None, max_retries=3):
+    """
+    Make API request with proper error handling
+    """
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {get_token()}'
+    }
+    
+    for attempt in range(max_retries):
+        try:
+            if method == 'GET':
+                response = requests.get(endpoint, headers=headers)
+            elif method == 'POST':
+                response = requests.post(endpoint, headers=headers, json=data)
+            elif method == 'PUT':
+                response = requests.put(endpoint, headers=headers, json=data)
+            
+            response_data = response.json()
+            
+            # Handle specific status codes
+            if response.status_code == 401:
+                raise AuthenticationError('Authentication required')
+            
+            if response.status_code == 403:
+                # Try to refresh token
+                refresh_token()
+                continue  # Retry
+            
+            if response.status_code == 404:
+                raise NotFoundError('Resource not found')
+            
+            if response.status_code >= 500:
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                raise ServerError(f"Server error: {response_data.get('message')}")
+            
+            if not response_data.get('success'):
+                raise APIError(response_data.get('message', 'Request failed'))
+            
+            return response_data
+            
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+                continue
+            raise ConnectionError(f"Failed to connect: {str(e)}")
+    
+    raise MaxRetriesExceeded('Maximum retry attempts exceeded')
+
+# Usage
+try:
+    data = make_api_request('http://localhost:3000/api/totes')
+    print('Totes:', data)
+except AuthenticationError:
+    print('Please login again')
+except APIError as e:
+    print(f'API error: {e}')
+```
+</CodeGroup>
+
+### Retry Strategy
+
+Implement exponential backoff for transient errors:
+
+```javascript
+async function retryWithBackoff(fn, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      // Only retry on server errors or network issues
+      if (error.status < 500 || i === maxRetries - 1) {
+        throw error;
+      }
+      
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = Math.pow(2, i) * 1000;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+```
+
+### Logging Errors
+
+All errors are automatically logged by the audit system:
+
+- **User identification**: ID, email, role
+- **Request details**: Endpoint, method, parameters
+- **Error information**: Status code, error message
+- **Context**: IP address, user agent, timestamp
+- **Session tracking**: Session ID for correlating events
+
+Administrators can view error logs in the admin dashboard under "System Events".
+
+## Error Response Reference
+
+### Authentication Errors
+
+| Status | Message | Cause | Solution |
+|--------|---------|-------|----------|
+| 401 | Token de autenticación requerido | Missing Authorization header | Include JWT token |
+| 401 | Credenciales inválidas | Wrong email/password | Check credentials |
+| 403 | Token inválido o expirado | Token expired or invalid | Re-authenticate |
+| 403 | Acceso denegado | Insufficient permissions | Use admin account |
+
+### Validation Errors
+
+| Status | Message | Cause | Solution |
+|--------|---------|-------|----------|
+| 400 | Preferencias inválidas | Invalid preferences object | Send valid JSON object |
+| 400 | Se requiere el ID del usuario | Missing userId parameter | Include userId in request |
+
+### Resource Errors
+
+| Status | Message | Cause | Solution |
+|--------|---------|-------|----------|
+| 404 | Usuario no encontrado | User ID doesn't exist | Verify user ID |
+| 404 | Recurso no encontrado | Resource doesn't exist | Check resource ID |
+
+### Server Errors
+
+| Status | Message | Cause | Solution |
+|--------|---------|-------|----------|
+| 500 | Error interno del servidor | Server-side error | Retry, contact support |
+| 500 | Error de base de datos | Database connection issue | Check database status |
+
+## Debugging Tips
+
+<Tip>
+  Enable detailed error logging in development by checking the server console output.
+</Tip>
+
+### Check Request Format
+
+1. Verify Content-Type header is `application/json`
+2. Ensure request body is valid JSON
+3. Check all required fields are included
+4. Validate data types match API expectations
+
+### Verify Authentication
+
+1. Check Authorization header is present
+2. Verify token format: `Bearer <jwt-token>`
+3. Decode JWT to check expiration time
+4. Confirm user has required permissions
+
+### Monitor Audit Logs
+
+All API requests are logged automatically:
+
+```bash
+# Example audit log entry
+[AUDIT] LOGIN - USUARIOS: Usuario user@example.com inició sesión exitosamente
+[AUDIT] ERROR - USUARIOS: Error en proceso de login
+```
+
+### Test with Health Endpoint
+
+Verify API and database connectivity:
+
+```bash
+curl -X GET "http://localhost:3000/api/health"
+```
+
+Expected response:
+```json
+{
+  "status": "healthy",
+  "database": "connected",
+  "timestamp": "2026-03-04T10:30:00.000Z"
+}
+```
+
+## Support and Troubleshooting
+
+If errors persist:
+
+1. **Check server logs**: Look for detailed error messages in the console
+2. **Verify database**: Ensure SQL Server is running and accessible
+3. **Review audit logs**: Check the admin dashboard for error history
+4. **Contact support**: Email support@ditzler.com with:
+   - Request details (endpoint, method, parameters)
+   - Error response
+   - Timestamp of the error
+   - User account information
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Overview" icon="book" href="/api/overview">
+    Return to API overview and base concepts
+  </Card>
+  <Card title="Authentication" icon="lock" href="/api/authentication">
+    Learn more about authentication and tokens
+  </Card>
+</CardGroup>

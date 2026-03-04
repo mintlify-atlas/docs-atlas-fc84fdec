@@ -1,0 +1,356 @@
+---
+title: User management
+description: Create, update, and manage users with role-based access control
+---
+
+DitzlerTotes provides comprehensive user management capabilities with support for multiple roles, granular permissions, and complete audit trails.
+
+## Overview
+
+User management is handled through the Admin Users interface (`pages/admin-users.html`) and is restricted to users with the **Administrador** role.
+
+<CardGroup cols={2}>
+  <Card title="Multi-Role Support" icon="user-group">
+    Assign multiple roles to a single user
+  </Card>
+  <Card title="Secure Authentication" icon="lock">
+    bcrypt password hashing with session management
+  </Card>
+  <Card title="Complete Audit Trail" icon="clipboard-list">
+    Track all user actions and changes
+  </Card>
+  <Card title="Preference Management" icon="sliders">
+    Customizable user preferences and menu layouts
+  </Card>
+</CardGroup>
+
+## User Roles
+
+DitzlerTotes supports five distinct roles:
+
+| Role | Description | Access Level |
+|------|-------------|-------------|
+| **Administrador** | Full system access, user management | Full |
+| **Supervisor** | Read-only dashboard access | Read-only |
+| **Visor** | Limited viewing permissions | Minimal |
+| **Operador de Llenado de Totes** | Filling operator interface | Operator |
+| **Operador de Totes** | Tote movement and status updates | Operator |
+| **Operador de Despacho** | Dispatch operations | Operator |
+
+<Info>
+Users can have multiple roles assigned simultaneously. For example, a user might be both "Administrador" and "Operador de Llenado de Totes".
+</Info>
+
+## User CRUD Operations
+
+### List Users
+
+Retrieve all users in the system:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/users \
+  -H "Content-Type: application/json" \
+  -d '{"action": "list"}'
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "users": [
+    {
+      "Id": 1,
+      "Nombre": "Admin",
+      "Apellido": "Sistema",
+      "Email": "admin@ditzler.com",
+      "Rol": "Administrador",
+      "Estado": "Activo",
+      "FechaCreacion": "2024-01-01T00:00:00"
+    }
+  ]
+}
+```
+
+### Create User
+
+Create a new user with password hashing:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "create",
+    "userData": {
+      "nombre": "Juan",
+      "apellido": "Perez",
+      "email": "juan.perez@ditzler.com",
+      "password": "SecurePassword123",
+      "rol": "Operador de Llenado de Totes",
+      "estado": "Activo"
+    }
+  }'
+```
+
+<Steps>
+  <Step title="Validate Email">
+    System checks email format using `FN_ValidarEmail` function
+  </Step>
+  <Step title="Check Duplicates">
+    Verifies no existing user has the same email
+  </Step>
+  <Step title="Hash Password">
+    Password is hashed using bcrypt with 10 salt rounds
+  </Step>
+  <Step title="Execute Stored Procedure">
+    Calls `SP_CrearUsuario` to insert the user record
+  </Step>
+  <Step title="Audit Log">
+    Creates audit event with user details and requesting admin
+  </Step>
+</Steps>
+
+### Update User
+
+Update user information or change roles:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "update",
+    "userData": {
+      "id": 5,
+      "nombre": "Juan",
+      "apellido": "Perez",
+      "email": "juan.perez@ditzler.com",
+      "rol": "Administrador, Operador de Llenado de Totes",
+      "estado": "Activo"
+    }
+  }'
+```
+
+<Warning>
+The root admin account (`admin@ditzler.com`) is protected and cannot be modified or deleted by other administrators.
+</Warning>
+
+### Delete User
+
+Remove a user from the system:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "delete",
+    "userData": {
+      "id": 5
+    }
+  }'
+```
+
+## Password Management
+
+### Password Hashing
+
+Passwords are secured using bcrypt:
+
+```javascript
+// From services/users.service.js
+const bcrypt = require('bcrypt');
+const SALT_ROUNDS = 10;
+
+const hashedPassword = await bcrypt.hash(userData.password, SALT_ROUNDS);
+```
+
+### Password Validation
+
+During login, passwords are compared securely:
+
+```javascript
+const isMatch = await bcrypt.compare(password, user.Password);
+if (!isMatch) {
+  return { success: false, message: 'Credenciales inválidas' };
+}
+```
+
+## User Status Management
+
+Users can have two states:
+
+### Active
+
+- Can log in and access assigned features
+- Appears in user lists and reports
+- Can be assigned to operations
+
+### Inactive
+
+- Cannot log in to the system
+- Hidden from operational user lists
+- Audit trail preserved
+
+<Tip>
+Use "Inactive" status instead of deleting users to preserve audit history and operational records.
+</Tip>
+
+## User Preferences
+
+Each user can customize their experience:
+
+```javascript
+// GET /api/user/preferences
+{
+  "success": true,
+  "preferences": {
+    "categoryOrder": [
+      "Dashboard",
+      "Totes",
+      "Clientes",
+      "Usuarios",
+      "Configuración"
+    ],
+    "excludedFunctions": [],
+    "theme": "dark",
+    "language": "es"
+  }
+}
+```
+
+### Customizable Settings
+
+- Menu category order
+- Hidden menu items
+- Theme preference (light/dark)
+- Language selection
+- Default page on login
+
+## Audit Trail
+
+All user management operations are logged:
+
+```javascript
+// Event logged to Eventos table
+{
+  "TipEvento": "Creacion",
+  "Modulo": "USUARIOS",
+  "Descripcion": "Usuario juan.perez@ditzler.com creado por admin@ditzler.com",
+  "Usuario": "Admin Sistema",
+  "DatosAdicionales": {
+    "usuarioId": 5,
+    "usuarioEmail": "juan.perez@ditzler.com",
+    "usuarioRol": "Operador de Llenado de Totes",
+    "valoresNuevos": {
+      "Nombre": "Juan",
+      "Apellido": "Perez",
+      "Rol": "Operador de Llenado de Totes",
+      "Estado": "Activo"
+    }
+  },
+  "IpAddress": "192.168.1.100",
+  "UserAgent": "Mozilla/5.0..."
+}
+```
+
+## Security Features
+
+### Root Admin Protection
+
+The system prevents accidental modification of the root admin:
+
+```javascript
+const ROOT_ADMIN_EMAIL = 'admin@ditzler.com';
+
+if (userData.email === ROOT_ADMIN_EMAIL && userData.id !== currentUser.Id) {
+  return {
+    success: false,
+    message: 'No se puede modificar el usuario administrador raíz',
+    status: 403
+  };
+}
+```
+
+### Email Validation
+
+Emails must pass server-side validation:
+
+```sql
+-- FN_ValidarEmail function
+RETURN CASE
+  WHEN @email LIKE '%_@%_._%' AND @email NOT LIKE '%[<>()\[\]:;,]%'
+  THEN 1
+  ELSE 0
+END
+```
+
+### Session Management
+
+User sessions are managed securely:
+
+- Sessions stored server-side with express-session
+- Configurable session timeout (default: 8 hours)
+- Automatic logout on session expiry
+- Session hijacking protection
+
+## UI Components
+
+The user management interface includes:
+
+### User Table
+
+- Sortable columns (Name, Email, Role, Status, Created Date)
+- Search and filter capabilities
+- Pagination for large user lists
+- Bulk actions (activate/deactivate multiple users)
+
+### User Form
+
+- Input validation (client and server-side)
+- Multi-select for roles
+- Password strength indicator
+- Status toggle
+
+### Action Buttons
+
+- Create new user
+- Edit existing user
+- Delete user (with confirmation)
+- Reset password
+- View audit history
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive names">
+    Use full names (first and last) to easily identify users in audit logs
+  </Accordion>
+  <Accordion title="Assign minimum required roles">
+    Follow principle of least privilege - only grant necessary permissions
+  </Accordion>
+  <Accordion title="Regular audits">
+    Review user list monthly to deactivate unused accounts
+  </Accordion>
+  <Accordion title="Strong passwords">
+    Enforce minimum 8 characters with mix of letters, numbers, symbols
+  </Accordion>
+  <Accordion title="Document role changes">
+    Add notes when changing user roles for audit trail context
+  </Accordion>
+</AccordionGroup>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="API: Users" icon="code" href="/api/users">
+    User management API reference
+  </Card>
+  <Card title="Roles & Permissions" icon="shield" href="/concepts/roles-and-permissions">
+    Understanding the role system
+  </Card>
+  <Card title="Multi-Role Support" icon="users" href="/concepts/multi-role-support">
+    How multi-role assignment works
+  </Card>
+  <Card title="Audit System" icon="clipboard-check" href="/features/audit-system">
+    Tracking user actions and changes
+  </Card>
+</CardGroup>

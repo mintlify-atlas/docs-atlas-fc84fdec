@@ -1,0 +1,492 @@
+---
+title: 'Event & Audit Logs'
+description: 'API endpoints for querying system events, audit logs, and activity statistics'
+---
+
+## List Events
+
+Retrieve a paginated list of system events with optional filtering.
+
+```http
+GET /api/eventos
+```
+
+### Query Parameters
+
+<ParamField query="page" type="integer" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Number of events per page
+</ParamField>
+
+<ParamField query="tipoEvento" type="string">
+  Filter by event type (e.g., "CambioEstado", "Login", "Error")
+</ParamField>
+
+<ParamField query="modulo" type="string">
+  Filter by module (e.g., "TOTES", "OPERADOR_TOTES", "DESPACHO", "LLENADO", "PRODUCTOS", "UBICACIONES")
+</ParamField>
+
+<ParamField query="exitoso" type="boolean">
+  Filter by success status (true or false)
+</ParamField>
+
+<ParamField query="fechaInicio" type="datetime">
+  Filter events from this date (ISO format)
+</ParamField>
+
+<ParamField query="fechaFin" type="datetime">
+  Filter events up to this date (ISO format)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="eventos" type="array" required>
+  Array of event objects
+  
+  <ResponseField name="Id" type="integer">
+    Unique event identifier
+  </ResponseField>
+  
+  <ResponseField name="ToteId" type="integer">
+    Related tote ID (if applicable)
+  </ResponseField>
+  
+  <ResponseField name="TipoEvento" type="string">
+    Event type classification
+  </ResponseField>
+  
+  <ResponseField name="Descripcion" type="string">
+    Event description
+  </ResponseField>
+  
+  <ResponseField name="UsuarioNombre" type="string">
+    User who triggered the event
+  </ResponseField>
+  
+  <ResponseField name="FechaEvento" type="datetime">
+    Event timestamp
+  </ResponseField>
+  
+  <ResponseField name="Modulo" type="string">
+    System module that generated the event
+  </ResponseField>
+  
+  <ResponseField name="Accion" type="string">
+    Action performed (e.g., "MOVER_TOTE", "UPDATE_STATUS", "CREATE", "UPDATE", "DELETE")
+  </ResponseField>
+  
+  <ResponseField name="Exitoso" type="boolean">
+    Whether the action completed successfully
+  </ResponseField>
+  
+  <ResponseField name="DatosAdicionales" type="string">
+    JSON string with additional event data
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="pagination" type="object" required>
+  Pagination metadata
+  
+  <ResponseField name="page" type="integer">
+    Current page number
+  </ResponseField>
+  
+  <ResponseField name="limit" type="integer">
+    Events per page
+  </ResponseField>
+  
+  <ResponseField name="total" type="integer">
+    Total number of events matching filters
+  </ResponseField>
+  
+  <ResponseField name="totalPages" type="integer">
+    Total number of pages
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/eventos?page=1&limit=20&modulo=DESPACHO&exitoso=true" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "eventos": [
+    {
+      "Id": 1523,
+      "ToteId": 456,
+      "TipoEvento": "CambioEstado",
+      "Descripcion": "Movido de Almacenamiento a Retail - Código Retail: RET-000042",
+      "UsuarioNombre": "operador@example.com",
+      "FechaEvento": "2024-01-15T14:23:45",
+      "Modulo": "DESPACHO",
+      "Accion": "MOVER_TOTE",
+      "Exitoso": true,
+      "DatosAdicionales": "{\"ubicacionAnterior\":\"Almacenamiento\",\"nuevaUbicacion\":\"Retail\",\"cliente\":\"Retail\",\"codigo\":\"T-001\",\"codigoBarra\":\"SEG-000001\",\"codigoRetail\":\"RET-000042\"}"
+    },
+    {
+      "Id": 1522,
+      "ToteId": 455,
+      "TipoEvento": "CambioEstado",
+      "Descripcion": "Actualización de tote: Estado: TOTE VACIO → Producto terminado, Código Seguimiento generado: SEG-000125",
+      "UsuarioNombre": "operador@example.com",
+      "FechaEvento": "2024-01-15T14:15:30",
+      "Modulo": "OPERADOR_TOTES",
+      "Accion": "UPDATE_STATUS",
+      "Exitoso": true,
+      "DatosAdicionales": "{\"codigo\":\"T-002\",\"estadoAnterior\":\"TOTE VACIO\",\"nuevoEstado\":\"Producto terminado\",\"ubicacionAnterior\":\"Almacenamiento\",\"nuevaUbicacion\":\"Almacenamiento\",\"cliente\":\"Retail\",\"producto\":\"Helado Vainilla\",\"codigoBarra\":\"SEG-000125\"}"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 1523,
+    "totalPages": 77
+  }
+}
+```
+
+---
+
+## Get Event Details
+
+Retrieve detailed information about a specific event.
+
+```http
+GET /api/eventos/:id
+```
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  Event ID to retrieve
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the event was found
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message if event was not found
+</ResponseField>
+
+<ResponseField name="evento" type="object">
+  Detailed event information
+  
+  <ResponseField name="Id" type="integer">
+    Event identifier
+  </ResponseField>
+  
+  <ResponseField name="ToteId" type="integer">
+    Related tote ID
+  </ResponseField>
+  
+  <ResponseField name="TipoEvento" type="string">
+    Event type
+  </ResponseField>
+  
+  <ResponseField name="Descripcion" type="string">
+    Event description
+  </ResponseField>
+  
+  <ResponseField name="UsuarioNombre" type="string">
+    User who triggered the event
+  </ResponseField>
+  
+  <ResponseField name="FechaEvento" type="datetime">
+    Event timestamp
+  </ResponseField>
+  
+  <ResponseField name="Modulo" type="string">
+    System module
+  </ResponseField>
+  
+  <ResponseField name="Accion" type="string">
+    Action performed
+  </ResponseField>
+  
+  <ResponseField name="Exitoso" type="boolean">
+    Success status
+  </ResponseField>
+  
+  <ResponseField name="DatosAdicionales" type="string">
+    Raw JSON string with additional data
+  </ResponseField>
+  
+  <ResponseField name="DireccionIP" type="string">
+    IP address of the user
+  </ResponseField>
+  
+  <ResponseField name="UserAgent" type="string">
+    Browser/client user agent
+  </ResponseField>
+  
+  <ResponseField name="Severidad" type="string">
+    Event severity level (e.g., "Info", "Warning", "Error")
+  </ResponseField>
+  
+  <ResponseField name="UsuarioId" type="integer">
+    User ID (parsed from DatosAdicionales)
+  </ResponseField>
+  
+  <ResponseField name="UsuarioEmail" type="string">
+    User email (parsed from DatosAdicionales)
+  </ResponseField>
+  
+  <ResponseField name="UsuarioRol" type="string">
+    User role (parsed from DatosAdicionales)
+  </ResponseField>
+  
+  <ResponseField name="ObjetoId" type="integer">
+    ID of the object affected
+  </ResponseField>
+  
+  <ResponseField name="ObjetoTipo" type="string">
+    Type of object affected (e.g., "Tote", "Producto", "Ubicación")
+  </ResponseField>
+  
+  <ResponseField name="ValoresAnteriores" type="object">
+    Previous values before the change
+  </ResponseField>
+  
+  <ResponseField name="ValoresNuevos" type="object">
+    New values after the change
+  </ResponseField>
+  
+  <ResponseField name="MensajeError" type="string">
+    Error message (if applicable)
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/eventos/1523" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "evento": {
+    "Id": 1523,
+    "ToteId": 456,
+    "TipoEvento": "CambioEstado",
+    "Descripcion": "Movido de Almacenamiento a Retail - Código Retail: RET-000042",
+    "UsuarioNombre": "operador@example.com",
+    "FechaEvento": "2024-01-15T14:23:45",
+    "Modulo": "DESPACHO",
+    "Accion": "MOVER_TOTE",
+    "Exitoso": true,
+    "DatosAdicionales": "{\"ubicacionAnterior\":\"Almacenamiento\",\"nuevaUbicacion\":\"Retail\",\"cliente\":\"Retail\",\"codigo\":\"T-001\",\"codigoBarra\":\"SEG-000001\",\"codigoRetail\":\"RET-000042\"}",
+    "DireccionIP": "192.168.1.100",
+    "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Severidad": "Info",
+    "UsuarioId": 42,
+    "UsuarioEmail": "operador@example.com",
+    "UsuarioRol": "Operador",
+    "ObjetoId": 456,
+    "ObjetoTipo": "Tote"
+  }
+}
+```
+
+### Error Response
+
+```json
+{
+  "success": false,
+  "message": "Evento no encontrado"
+}
+```
+
+---
+
+## Get Event Statistics
+
+Retrieve aggregated statistics about system events.
+
+```http
+GET /api/eventos/estadisticas
+```
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="estadisticas" type="object" required>
+  Statistics object
+  
+  <ResponseField name="generales" type="object">
+    General event statistics
+    
+    <ResponseField name="TotalEventos" type="integer">
+      Total number of events in the system
+    </ResponseField>
+    
+    <ResponseField name="EventosExitosos" type="integer">
+      Number of successful events
+    </ResponseField>
+    
+    <ResponseField name="EventosFallidos" type="integer">
+      Number of failed events
+    </ResponseField>
+    
+    <ResponseField name="EventosUltimas24h" type="integer">
+      Events in the last 24 hours
+    </ResponseField>
+  </ResponseField>
+  
+  <ResponseField name="porTipo" type="array">
+    Event breakdown by type
+    
+    <ResponseField name="Tipo" type="string">
+      Event type name
+    </ResponseField>
+    
+    <ResponseField name="Cantidad" type="integer">
+      Number of events of this type
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.ditzlertotes.com/api/eventos/estadisticas" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "estadisticas": {
+    "generales": {
+      "TotalEventos": 15234,
+      "EventosExitosos": 14892,
+      "EventosFallidos": 342,
+      "EventosUltimas24h": 287
+    },
+    "porTipo": [
+      {
+        "Tipo": "CambioEstado",
+        "Cantidad": 8543
+      },
+      {
+        "Tipo": "Login",
+        "Cantidad": 3421
+      },
+      {
+        "Tipo": "Create",
+        "Cantidad": 1256
+      },
+      {
+        "Tipo": "Update",
+        "Cantidad": 1523
+      },
+      {
+        "Tipo": "Delete",
+        "Cantidad": 234
+      },
+      {
+        "Tipo": "Error",
+        "Cantidad": 257
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Common Event Types
+
+### Tote Events
+
+- **CambioEstado**: Tote status or location change
+- **Llenado**: Tote filling operation
+- **Vaciado**: Tote emptying operation
+
+### Administrative Events
+
+- **Create**: New record created
+- **Update**: Record modified
+- **Delete**: Record deleted
+
+### System Events
+
+- **Login**: User authentication
+- **Logout**: User logout
+- **Error**: System error
+- **Warning**: System warning
+
+---
+
+## Common Modules
+
+- **TOTES**: General tote management
+- **OPERADOR_TOTES**: Operator tote operations
+- **DESPACHO**: Dispatch operations
+- **LLENADO**: Filling operations
+- **PRODUCTOS**: Product management
+- **UBICACIONES**: Location management
+- **AUTH**: Authentication
+- **ADMIN**: Administrative operations
+
+---
+
+## Error Handling
+
+All endpoints return consistent error responses:
+
+### Not Found Error (404)
+
+```json
+{
+  "success": false,
+  "message": "Evento no encontrado"
+}
+```
+
+### Server Error (500)
+
+```json
+{
+  "success": false,
+  "message": "Error al obtener eventos"
+}
+```
+
+```json
+{
+  "success": false,
+  "message": "Error al obtener estadísticas de eventos"
+}
+```
+
+```json
+{
+  "success": false,
+  "message": "Error al obtener detalle del evento"
+}
+```

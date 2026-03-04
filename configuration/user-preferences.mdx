@@ -1,0 +1,810 @@
+---
+title: User Preferences
+description: User preference system for customizable menu order, excluded functions, and personalized settings stored in the database
+---
+
+## Overview
+
+DitzlerTotes includes a comprehensive user preference system that allows users to customize their experience. Preferences are stored in JSON format in the database and synchronized across devices when the user logs in.
+
+## Preference Storage
+
+### Database Schema
+
+Preferences are stored in the `Usuarios` table in the `Preferencias` column:
+
+```sql
+CREATE TABLE Usuarios (
+    Id INT PRIMARY KEY IDENTITY(1,1),
+    Email NVARCHAR(255) UNIQUE NOT NULL,
+    Password NVARCHAR(255) NOT NULL,
+    Rol NVARCHAR(500) NOT NULL,
+    Preferencias NVARCHAR(MAX),  -- JSON-encoded preferences
+    FechaModificacion DATETIME
+);
+```
+
+<ParamField path="Preferencias" type="NVARCHAR(MAX)">
+  JSON-encoded user preferences object
+  
+  Example:
+  ```json
+  {
+    "menuCategoryOrder": ["Gestión de Totes", "Gestión de Productos", ...],
+    "excludedFunctions": ["admin-users", "clientes"],
+    "theme": "light",
+    "language": "es"
+  }
+  ```
+</ParamField>
+
+### Preference Structure
+
+The preference object supports these keys:
+
+<ResponseField name="menuCategoryOrder" type="array">
+  Custom order of menu categories in the sidebar
+  
+  ```json
+  "menuCategoryOrder": [
+    "Dashboard",
+    "Gestión de Totes",
+    "Gestión de Productos",
+    "Gestión de Ubicaciones",
+    "Gestión de Clientes",
+    "Operadores",
+    "Administración",
+    "Sistema"
+  ]
+  ```
+</ResponseField>
+
+<ResponseField name="excludedFunctions" type="array">
+  List of menu items to hide for this user (admin-configurable)
+  
+  ```json
+  "excludedFunctions": [
+    "admin-users",
+    "eventos",
+    "roles-config"
+  ]
+  ```
+</ResponseField>
+
+<ResponseField name="theme" type="string">
+  UI theme preference (future use)
+  
+  ```json
+  "theme": "light"
+  ```
+</ResponseField>
+
+<ResponseField name="language" type="string">
+  Language preference (future use)
+  
+  ```json
+  "language": "es"
+  ```
+</ResponseField>
+
+## API Endpoints
+
+### Get User Preferences
+
+Retrieve the current user's preferences:
+
+<CodeGroup>
+```javascript GET /api/user/preferences
+const response = await fetch('/api/user/preferences', {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+        'Content-Type': 'application/json'
+    }
+});
+
+const data = await response.json();
+// { success: true, preferences: { ... } }
+```
+
+```json Response
+{
+  "success": true,
+  "preferences": {
+    "menuCategoryOrder": [
+      "Dashboard",
+      "Gestión de Totes",
+      "Gestión de Productos"
+    ],
+    "excludedFunctions": []
+  }
+}
+```
+</CodeGroup>
+
+<Info>Requires active session. User must be logged in.</Info>
+
+### Update User Preferences
+
+Update the current user's preferences:
+
+<CodeGroup>
+```javascript PUT /api/user/preferences
+const response = await fetch('/api/user/preferences', {
+    method: 'PUT',
+    credentials: 'include',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        preferences: {
+            menuCategoryOrder: [
+                "Dashboard",
+                "Gestión de Totes",
+                "Operadores"
+            ]
+        }
+    })
+});
+
+const data = await response.json();
+// { success: true, message: 'Preferencias guardadas', preferences: { ... } }
+```
+
+```json Request Body
+{
+  "preferences": {
+    "menuCategoryOrder": [
+      "Dashboard",
+      "Gestión de Totes",
+      "Operadores"
+    ]
+  }
+}
+```
+
+```json Response
+{
+  "success": true,
+  "message": "Preferencias guardadas",
+  "preferences": {
+    "menuCategoryOrder": [...],
+    "excludedFunctions": [...]
+  }
+}
+```
+</CodeGroup>
+
+<Warning>
+  New preferences are **merged** with existing preferences. Only specified keys are updated.
+</Warning>
+
+### Update User Preferences (Admin)
+
+Administrators can update preferences for any user:
+
+<CodeGroup>
+```javascript PUT /api/admin/user-preferences
+const response = await fetch('/api/admin/user-preferences', {
+    method: 'PUT',
+    credentials: 'include',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        userId: 5,
+        preferences: {
+            excludedFunctions: ['eventos', 'roles-config']
+        }
+    })
+});
+```
+
+```json Request Body
+{
+  "userId": 5,
+  "preferences": {
+    "excludedFunctions": [
+      "eventos",
+      "roles-config"
+    ]
+  }
+}
+```
+</CodeGroup>
+
+<Info>Requires Administrator role</Info>
+
+## Frontend Integration
+
+### Loading Preferences on Login
+
+Preferences are automatically loaded when the user logs in:
+
+```javascript js/script.js
+const response = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+});
+
+const data = await response.json();
+
+if (data.success) {
+    sessionStorage.setItem('loggedInAdmin', JSON.stringify({
+        username: data.username,
+        fullname: data.fullname,
+        role: data.role,
+        userId: data.userId,
+        preferences: data.preferences || {},  // Loaded preferences
+        timestamp: new Date().getTime()
+    }));
+}
+```
+
+### Accessing Preferences
+
+Retrieve preferences from session storage:
+
+```javascript
+function getUserData() {
+    const stored = sessionStorage.getItem('loggedInAdmin');
+    return stored ? JSON.parse(stored) : null;
+}
+
+const userData = getUserData();
+if (userData && userData.preferences) {
+    const menuOrder = userData.preferences.menuCategoryOrder;
+    const excluded = userData.preferences.excludedFunctions;
+}
+```
+
+### Dynamic Sidebar
+
+The sidebar uses preferences to customize the menu:
+
+```javascript js/dynamic-sidebar.js
+function loadMenuCategoryOrder() {
+    const userData = getUserData();
+    let savedOrder = [];
+    
+    // Load saved category order
+    if (userData.preferences && userData.preferences.menuCategoryOrder) {
+        savedOrder = userData.preferences.menuCategoryOrder;
+    }
+    
+    return savedOrder;
+}
+
+function getExcludedFunctions() {
+    const userData = getUserData();
+    if (userData.preferences && userData.preferences.excludedFunctions) {
+        return userData.preferences.excludedFunctions;
+    }
+    return [];
+}
+```
+
+## Menu Customization
+
+### Category Order Modal
+
+Users can reorder menu categories using a drag-and-drop interface:
+
+<Steps>
+  <Step title="Open category order modal">
+    Click the "⚙️ Personalizar Orden" button in the sidebar.
+  </Step>
+  
+  <Step title="Drag categories to reorder">
+    Click and drag categories to your preferred order.
+  </Step>
+  
+  <Step title="Save changes">
+    Click "Guardar Orden" to persist the changes.
+    
+    ```javascript js/category-order-modal.js
+    async function saveCategoryOrder() {
+        const orderArray = getCategoryOrder();
+        
+        const response = await fetch('/api/user/preferences', {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                preferences: {
+                    menuCategoryOrder: orderArray
+                }
+            })
+        });
+        
+        if (response.ok) {
+            // Update session storage
+            const data = getUserData();
+            data.preferences = { ...data.preferences, menuCategoryOrder: orderArray };
+            sessionStorage.setItem('loggedInAdmin', JSON.stringify(data));
+            
+            // Reload sidebar
+            location.reload();
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Reset to default">
+    Click "Restablecer por Defecto" to reset to the default order.
+  </Step>
+</Steps>
+
+### Excluded Functions
+
+Administrators can hide specific menu items for individual users:
+
+<Steps>
+  <Step title="Open user configuration">
+    Navigate to **Configuración de Menú por Usuario** (users-menu.html).
+  </Step>
+  
+  <Step title="Select user">
+    Choose a user from the dropdown list.
+  </Step>
+  
+  <Step title="Toggle functions">
+    Check/uncheck functions to show/hide them in the user's menu.
+  </Step>
+  
+  <Step title="Save configuration">
+    Click "Guardar Cambios" to update the user's preferences.
+    
+    ```javascript js/roles-config.js
+    const prefsResponse = await fetch('/api/admin/user-preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            userId: editingUserId,
+            preferences: {
+                excludedFunctions: excludedFunctions
+            }
+        })
+    });
+    ```
+  </Step>
+</Steps>
+
+<Info>
+  When a user logs in, excluded functions are filtered out of their sidebar menu automatically.
+</Info>
+
+## Backend Implementation
+
+### Service Layer
+
+The `auth.service.js` handles preference operations:
+
+<CodeGroup>
+```javascript Get Preferences
+async function getPreferences(userEmail) {
+    const pool = await getPool();
+    
+    const result = await pool.request()
+        .input('email', sql.NVarChar, userEmail)
+        .query('SELECT Preferencias FROM Usuarios WHERE Email = @email');
+    
+    if (!result.recordset || result.recordset.length === 0) {
+        return { success: false, message: 'Usuario no encontrado' };
+    }
+    
+    let preferences = {};
+    if (result.recordset[0].Preferencias) {
+        preferences = JSON.parse(result.recordset[0].Preferencias);
+    }
+    
+    return { success: true, preferences };
+}
+```
+
+```javascript Update Preferences
+async function updatePreferences(userEmail, newPreferences) {
+    const pool = await getPool();
+    
+    // Get current preferences
+    const currentResult = await pool.request()
+        .input('email', sql.NVarChar, userEmail)
+        .query('SELECT Preferencias FROM Usuarios WHERE Email = @email');
+    
+    let currentPrefs = {};
+    if (currentResult.recordset[0].Preferencias) {
+        currentPrefs = JSON.parse(currentResult.recordset[0].Preferencias);
+    }
+    
+    // Merge with new preferences
+    const mergedPrefs = { ...currentPrefs, ...newPreferences };
+    const prefsJson = JSON.stringify(mergedPrefs);
+    
+    // Update database
+    await pool.request()
+        .input('email', sql.NVarChar, userEmail)
+        .input('preferences', sql.NVarChar, prefsJson)
+        .input('fechaModificacion', sql.DateTime, new Date())
+        .query('UPDATE Usuarios SET Preferencias = @preferences, FechaModificacion = @fechaModificacion WHERE Email = @email');
+    
+    return { success: true, preferences: mergedPrefs };
+}
+```
+
+```javascript Update by User ID (Admin)
+async function updatePreferencesByUserId(userId, newPreferences) {
+    const pool = await getPool();
+    
+    // Get current preferences
+    const currentResult = await pool.request()
+        .input('userId', sql.Int, userId)
+        .query('SELECT Preferencias FROM Usuarios WHERE Id = @userId');
+    
+    let currentPrefs = {};
+    if (currentResult.recordset[0].Preferencias) {
+        currentPrefs = JSON.parse(currentResult.recordset[0].Preferencias);
+    }
+    
+    // Merge with new preferences
+    const mergedPrefs = { ...currentPrefs, ...newPreferences };
+    const prefsJson = JSON.stringify(mergedPrefs);
+    
+    // Update database
+    await pool.request()
+        .input('userId', sql.Int, userId)
+        .input('preferences', sql.NVarChar, prefsJson)
+        .input('fechaModificacion', sql.DateTime, new Date())
+        .query('UPDATE Usuarios SET Preferencias = @preferences, FechaModificacion = @fechaModificacion WHERE Id = @userId');
+    
+    return { success: true, preferences: mergedPrefs };
+}
+```
+</CodeGroup>
+
+<Check>
+  All preference updates use **merge semantics** - existing preferences are preserved unless explicitly overwritten.
+</Check>
+
+### Controller Layer
+
+The `auth.controller.js` exposes preference endpoints:
+
+```javascript controllers/auth.controller.js
+class AuthController {
+    // GET /api/user/preferences
+    async getPreferences(req, res) {
+        try {
+            const userEmail = req.session.userEmail;
+            
+            if (!userEmail) {
+                return res.status(401).json({ 
+                    success: false, 
+                    message: 'No autenticado' 
+                });
+            }
+            
+            const result = await authService.getPreferences(userEmail);
+            
+            if (result.success) {
+                res.json({ success: true, preferences: result.preferences });
+            } else {
+                res.status(404).json(result);
+            }
+        } catch (error) {
+            res.status(500).json({ 
+                success: false, 
+                message: 'Error al obtener preferencias' 
+            });
+        }
+    }
+    
+    // PUT /api/user/preferences
+    async updatePreferences(req, res) {
+        try {
+            const userEmail = req.session.userEmail;
+            const { preferences } = req.body;
+            
+            if (!userEmail) {
+                return res.status(401).json({ 
+                    success: false, 
+                    message: 'No autenticado' 
+                });
+            }
+            
+            if (!preferences || typeof preferences !== 'object') {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Datos de preferencias inválidos' 
+                });
+            }
+            
+            const result = await authService.updatePreferences(userEmail, preferences);
+            
+            if (result.success) {
+                res.json({ 
+                    success: true, 
+                    message: 'Preferencias guardadas', 
+                    preferences: result.preferences 
+                });
+            } else {
+                res.status(400).json(result);
+            }
+        } catch (error) {
+            res.status(500).json({ 
+                success: false, 
+                message: 'Error al actualizar preferencias' 
+            });
+        }
+    }
+    
+    // PUT /api/admin/user-preferences
+    async updateUserPreferences(req, res) {
+        try {
+            const { userId, preferences } = req.body;
+            
+            if (!userId) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'userId es requerido' 
+                });
+            }
+            
+            if (!preferences || typeof preferences !== 'object') {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Datos de preferencias inválidos' 
+                });
+            }
+            
+            const result = await authService.updatePreferencesByUserId(userId, preferences);
+            
+            if (result.success) {
+                res.json({ 
+                    success: true, 
+                    message: 'Preferencias del usuario guardadas', 
+                    preferences: result.preferences 
+                });
+            } else {
+                res.status(400).json(result);
+            }
+        } catch (error) {
+            res.status(500).json({ 
+                success: false, 
+                message: 'Error al actualizar preferencias del usuario' 
+            });
+        }
+    }
+}
+```
+
+## Session Storage
+
+### Configuration
+
+Session storage configuration from `js/config.js`:
+
+```javascript js/config.js
+const CONFIG = {
+    SESSION: {
+        EXPIRY_TIME: 8 * 60 * 60 * 1000,  // 8 hours
+        STORAGE_KEY: 'loggedInAdmin'
+    }
+};
+
+const UTILS = {
+    // Get session data
+    getSessionData: () => {
+        const stored = sessionStorage.getItem(CONFIG.SESSION.STORAGE_KEY);
+        return stored ? JSON.parse(stored) : null;
+    },
+    
+    // Clear session
+    clearSession: () => {
+        sessionStorage.removeItem(CONFIG.SESSION.STORAGE_KEY);
+        localStorage.removeItem(CONFIG.SESSION.STORAGE_KEY);
+    },
+    
+    // Validate session
+    isSessionValid: (sessionData) => {
+        if (!sessionData) return false;
+        const currentTime = new Date().getTime();
+        const sessionTime = sessionData.timestamp;
+        return (currentTime - sessionTime) < CONFIG.SESSION.EXPIRY_TIME;
+    }
+};
+```
+
+<Info>
+  Session data is stored in `sessionStorage`, not `localStorage`, so it's cleared when the browser tab closes.
+</Info>
+
+## Use Cases
+
+### Personalized Dashboard
+
+Create role-specific menu layouts:
+
+<Tabs>
+  <Tab title="Administrator">
+    ```json
+    {
+      "menuCategoryOrder": [
+        "Dashboard",
+        "Administración",
+        "Sistema",
+        "Gestión de Totes",
+        "Gestión de Clientes"
+      ],
+      "excludedFunctions": []
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Operator">
+    ```json
+    {
+      "menuCategoryOrder": [
+        "Operadores",
+        "Gestión de Totes"
+      ],
+      "excludedFunctions": [
+        "admin-users",
+        "clientes",
+        "eventos",
+        "roles-config"
+      ]
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Viewer">
+    ```json
+    {
+      "menuCategoryOrder": [
+        "Dashboard",
+        "Gestión de Totes",
+        "Gestión de Clientes"
+      ],
+      "excludedFunctions": [
+        "admin-users",
+        "roles-config",
+        "users-menu"
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Department-Specific Views
+
+Hide irrelevant sections for different departments:
+
+<CardGroup cols={2}>
+  <Card title="Warehouse Team" icon="warehouse">
+    Show only:
+    - Gestión de Totes
+    - Gestión de Ubicaciones
+    - Operadores
+  </Card>
+  
+  <Card title="Sales Team" icon="handshake">
+    Show only:
+    - Dashboard
+    - Gestión de Clientes
+    - Vista de Registros
+  </Card>
+  
+  <Card title="Management" icon="chart-line">
+    Show all sections with analytics focus:
+    - Dashboard first
+    - Vista de Registros
+    - Eventos
+  </Card>
+  
+  <Card title="IT Team" icon="code">
+    Show system management:
+    - Administración
+    - Sistema
+    - Eventos
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always merge preferences" icon="code-merge">
+    When updating preferences, always merge with existing preferences to avoid data loss:
+    
+    ```javascript
+    // ✅ Good - Merge
+    const merged = { ...currentPrefs, ...newPrefs };
+    
+    // ❌ Bad - Overwrite
+    const updated = newPrefs;
+    ```
+  </Accordion>
+  
+  <Accordion title="Validate preference data" icon="check">
+    Always validate preference objects before saving:
+    
+    ```javascript
+    if (!preferences || typeof preferences !== 'object') {
+        throw new Error('Invalid preferences');
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Handle missing preferences gracefully" icon="shield">
+    Provide defaults when preferences are missing:
+    
+    ```javascript
+    const menuOrder = userData.preferences?.menuCategoryOrder || DEFAULT_ORDER;
+    ```
+  </Accordion>
+  
+  <Accordion title="Update session after preference changes" icon="rotate">
+    Always update sessionStorage after changing preferences:
+    
+    ```javascript
+    const data = getUserData();
+    data.preferences = updatedPreferences;
+    sessionStorage.setItem('loggedInAdmin', JSON.stringify(data));
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Preferences not saving
+
+<Steps>
+  <Step title="Check user is authenticated">
+    Verify session is valid:
+    ```javascript
+    const userData = getUserData();
+    console.log('Logged in:', !!userData);
+    ```
+  </Step>
+  
+  <Step title="Check request payload">
+    Verify preferences object is valid:
+    ```javascript
+    console.log('Preferences:', JSON.stringify(preferences, null, 2));
+    ```
+  </Step>
+  
+  <Step title="Check server response">
+    Check for errors in server response:
+    ```javascript
+    const response = await fetch('/api/user/preferences', {...});
+    const data = await response.json();
+    console.log('Server response:', data);
+    ```
+  </Step>
+</Steps>
+
+### Menu order not applying
+
+<Check>Ensure page is reloaded after saving preferences:</Check>
+
+```javascript
+await saveCategoryOrder();
+location.reload();  // Required to apply changes
+```
+
+### Preferences reset on logout
+
+This is expected behavior - preferences are stored in the database, not in session storage. They are reloaded on next login.
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/configuration/environment-variables">
+    Session configuration and storage
+  </Card>
+  
+  <Card title="Database Setup" icon="database" href="/configuration/database-setup">
+    Usuarios table schema and preferences column
+  </Card>
+</CardGroup>

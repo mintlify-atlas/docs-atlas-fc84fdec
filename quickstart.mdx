@@ -1,80 +1,386 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick start guide
+description: Get DitzlerTotes up and running in minutes with this step-by-step guide
 ---
 
-## Get started in three steps
+This guide will help you set up and run DitzlerTotes in the shortest time possible. Follow these steps to get your development environment ready.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before starting, ensure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- **Node.js** version 18 or higher
+- **SQL Server** 2016 or higher (Express edition works fine)
+- **npm** package manager
+- **Git** for cloning the repository
 
-### Step 2: Deploy your changes
+<Tip>
+You can check your Node.js version with `node --version`. If you need to upgrade, download the latest LTS version from [nodejs.org](https://nodejs.org).
+</Tip>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+## Installation
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Steps>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+<Step title="Clone the repository">
 
-### Step 3: Go live
+First, clone the DitzlerTotes repository to your local machine:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+```bash
+git clone <repository-url>
+cd DitzlerTotesDB
+```
+
+</Step>
+
+<Step title="Install dependencies">
+
+Install all required Node.js packages:
+
+```bash
+npm install
+```
+
+This will install:
+- Express 5.1.0 (web framework)
+- mssql 11.0.1 (SQL Server client)
+- bcrypt 6.0.0 (password hashing)
+- helmet 8.1.0 (security middleware)
+- express-rate-limit 8.2.1 (rate limiting)
+- express-session 1.18.2 (session management)
+- dotenv 17.2.3 (environment variables)
+- jsonwebtoken 9.0.3 (JWT handling)
+
+</Step>
+
+<Step title="Configure environment variables">
+
+Create your environment configuration file:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` with your database credentials:
+
+```env .env
+# Database Configuration
+DB_USER=your_database_user
+DB_PASSWORD=your_database_password
+DB_DATABASE=Ditzler
+DB_SERVER=localhost
+DB_PORT=1433
+
+# Server Configuration
+PORT=3003
+NODE_ENV=development
+
+# Session Security
+SESSION_SECRET=change-this-to-a-random-secret-key-in-production
+```
+
+<Warning>
+Never commit your `.env` file to version control. It contains sensitive credentials.
+</Warning>
+
+</Step>
+
+<Step title="Generate a secure session secret">
+
+For production use, generate a strong random secret:
+
+<CodeGroup>
+
+```bash Node.js
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+```powershell PowerShell
+[guid]::NewGuid().ToString() + [guid]::NewGuid().ToString()
+```
+
+</CodeGroup>
+
+Copy the output and update `SESSION_SECRET` in your `.env` file.
+
+</Step>
+
+<Step title="Set up the database">
+
+Execute the database installation scripts in SQL Server. You have two options:
+
+**Option 1: Master installation script**
+
+```sql
+-- Run database/00_Master_Install.sql in SQL Server Management Studio
+```
+
+**Option 2: Run scripts sequentially**
+
+```sql
+-- Execute in order:
+-- 1. database/01_Usuarios_Table.sql
+-- 2. database/02_Clientes_Table.sql
+-- 3. database/03_Totes_Table.sql
+-- 4. database/04_Eventos_Table.sql
+-- 5. database/05_Update_User_Roles.sql
+-- 6. database/06_Add_Llenado_Role.sql
+-- 7. database/07_Multi_Role_Support.sql
+-- 8. database/08_User_Preferences.sql
+-- 9. database/09_Productos_Ubicaciones.sql
+```
+
+This creates:
+- 6 main tables (Usuarios, Clientes, Totes, Llenados_Totes, Eventos, Productos, Ubicaciones)
+- 18+ stored procedures
+- 3 database functions
+- 39+ indexes for performance
+
+</Step>
+
+<Step title="Start the server">
+
+Now you're ready to launch DitzlerTotes:
+
+<CodeGroup>
+
+```bash Production
+npm start
+```
+
+```bash Development (with auto-reload)
+npm run dev
+```
+
+</CodeGroup>
+
+You should see:
+
+```
+🚀 Servidor DitzlerTotesDB ejecutándose en http://localhost:3003
+📦 Arquitectura modular activa (Fase 1 completada)
+📁 Módulos migrados: Auth, Totes, Users, Clients, Products, Locations
+```
+
+</Step>
+
+<Step title="Verify the installation">
+
+Test the database connection:
+
+```bash
+curl http://localhost:3003/api/test-db-connection
+```
+
+Test the audit system:
+
+```bash
+curl http://localhost:3003/api/test-audit
+```
+
+Both endpoints should return successful responses.
+
+</Step>
+
+</Steps>
+
+## First login
+
+Once the server is running, open your browser and navigate to:
+
+```
+http://localhost:3003
+```
+
+You'll see the login page. Use these default credentials:
+
+<Warning>
+These are development credentials. Change them immediately in production!
+</Warning>
+
+### Default accounts
+
+<Tabs>
+  <Tab title="Administrator">
+    **Email:** admin@ditzler.com  
+    **Password:** admin123  
+    **Role:** Full system access with all permissions
+  </Tab>
+  <Tab title="Viewer">
+    **Email:** visor@ditzler.com  
+    **Password:** visor123  
+    **Role:** Read-only dashboard access
+  </Tab>
+  <Tab title="Filling Operator">
+    **Email:** llenado@ditzler.com  
+    **Password:** llenado123  
+    **Role:** Access to filling operator panel
+  </Tab>
+</Tabs>
+
+## Exploring the dashboard
+
+After logging in as administrator, you'll see the main dashboard at `/dashboard` with:
+
+- **KPI metrics** - Total totes, clients, and availability percentage
+- **Status distribution** - Visual breakdown of tote states (Available, In Use, Maintenance, Out of Service)
+- **Active alerts** - Expiration warnings and system notifications
+- **Recent activity** - Latest movements and operations
+
+## Quick tour
+
+Here are the main sections you can access:
+
+<CardGroup cols={2}>
+  <Card title="Users" icon="users">
+    Manage user accounts, assign roles, and configure permissions at `/pages/admin-users.html`
+  </Card>
+  <Card title="Clients" icon="building">
+    Create and manage client companies with contact information at `/pages/clientes.html`
+  </Card>
+  <Card title="Totes" icon="box">
+    Control tote containers, states, and locations at `/pages/totes.html`
+  </Card>
+  <Card title="Products" icon="flask">
+    Manage product catalog with categories at `/pages/productos.html`
+  </Card>
+  <Card title="Locations" icon="map-marker">
+    Define storage zones and areas at `/pages/ubicaciones.html`
+  </Card>
+  <Card title="Events" icon="list">
+    View audit logs and system events at `/pages/eventos.html`
+  </Card>
+</CardGroup>
+
+## Running tests
+
+DitzlerTotes includes a test suite built with Jest:
+
+```bash
+npm test
+```
+
+The test configuration is already set up in `package.json` with `jsdom` environment for frontend testing.
+
+## Development mode
+
+For active development, use nodemon for automatic server restarts:
+
+```bash
+npm run dev
+```
+
+This will watch for changes and reload the server automatically.
+
+<Note>
+The server includes anti-cache middleware for development that prevents browser caching of JavaScript and CSS files. You'll always get the latest versions during development.
+</Note>
+
+## API testing
+
+You can test the REST API endpoints using curl or any HTTP client:
+
+### Login
+
+```bash
+curl -X POST http://localhost:3003/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@ditzler.com", "password": "admin123"}'
+```
+
+### Get dashboard statistics
+
+```bash
+curl http://localhost:3003/api/dashboard/stats
+```
+
+### List totes
+
+```bash
+curl http://localhost:3003/api/totes
+```
+
+### Get active alerts
+
+```bash
+curl http://localhost:3003/api/alertas
+```
+
+## Common configuration
+
+The frontend configuration is located in `js/config.js`:
+
+```javascript js/config.js
+const CONFIG = {
+  SESSION: {
+    STORAGE_KEY: 'loggedInAdmin',
+    TIMEOUT: 8 * 60 * 60 * 1000  // 8 hours
+  },
+  API: {
+    BASE_URL: '',
+    TIMEOUT: 10000
+  },
+  UI: {
+    ITEMS_PER_PAGE: 50,
+    REFRESH_INTERVAL: 30000
+  }
+};
+```
+
+You can adjust these values to match your requirements.
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that you have DitzlerTotes running:
 
-<CardGroup cols={2}>
+<Steps>
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+<Step title="Create your first client">
+Navigate to the Clients page and add a new client company
+</Step>
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+<Step title="Add products">
+Set up your product catalog with categories (Dulces, Aceites, Jarabes, Esencias)
+</Step>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+<Step title="Define locations">
+Create storage locations (Almacén, Producción, Despacho, Mantenimiento)
+</Step>
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+<Step title="Register totes">
+Add tote containers and assign them to locations
+</Step>
 
-</CardGroup>
+<Step title="Configure operators">
+Create operator accounts and test the specialized interfaces
+</Step>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Database connection fails">
+    Check your SQL Server credentials in `.env`. Ensure SQL Server is running and accepting connections on the specified port (default 1433).
+  </Accordion>
+  
+  <Accordion title="Port already in use">
+    Change the `PORT` value in your `.env` file to an available port, such as 3003 or 3005.
+  </Accordion>
+  
+  <Accordion title="Login fails with correct credentials">
+    Verify that the database scripts executed successfully and the Usuarios table contains the default accounts. Check the server logs for authentication errors.
+  </Accordion>
+  
+  <Accordion title="Session expires immediately">
+    Ensure `SESSION_SECRET` is set in your `.env` file. The session timeout is configured to 8 hours by default in `js/config.js`.
+  </Accordion>
+</AccordionGroup>
+
+## Getting help
+
+For detailed installation instructions and production deployment, see the [Installation guide](/installation).
+
+For additional documentation:
+- Technical database documentation: `database/README.md`
+- Additional docs folder: `docs/`

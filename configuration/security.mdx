@@ -1,0 +1,622 @@
+---
+title: Security Configuration
+description: Comprehensive security features including Helmet, rate limiting, session management, and best practices for the DitzlerTotes application
+---
+
+## Overview
+
+DitzlerTotes implements a multi-layered security architecture to protect against common web vulnerabilities and attacks. The security system is configured in `middleware/security.js` and includes:
+
+- HTTP security headers (Helmet)
+- Rate limiting for brute force protection
+- Secure session management
+- Password hashing with bcrypt
+- Environment variable validation
+
+## Security Middleware Stack
+
+### Initialization
+
+The security configuration is automatically applied when the application starts:
+
+```javascript
+const { configureSecurity } = require('./middleware/security');
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Apply all security middleware
+configureSecurity(app);
+```
+
+Output on startup:
+```bash
+🔒 Configurando seguridad de la aplicación...
+
+✅ Variables de entorno cargadas correctamente
+✅ Helmet configurado - Headers de seguridad activos
+✅ Sesiones seguras configuradas
+✅ Rate limiting configurado - Protección contra ataques de fuerza bruta
+
+✅ Configuración de seguridad completada
+```
+
+## HTTP Security Headers (Helmet)
+
+### Configuration
+
+Helmet is configured to set secure HTTP headers that protect against common vulnerabilities:
+
+```javascript
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "https:"],
+        },
+    },
+    hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true
+    }
+}));
+```
+
+### Security Headers Explained
+
+<AccordionGroup>
+  <Accordion title="Content-Security-Policy (CSP)" icon="shield-halved">
+    Prevents XSS attacks by controlling which resources can be loaded.
+    
+    **Directives:**
+    - `defaultSrc: ["'self'"]` - Only load resources from same origin
+    - `styleSrc` - Allow inline styles and Google Fonts
+    - `scriptSrc: ["'self'", "'unsafe-inline'"]` - Allow inline scripts (required for SPA)
+    - `imgSrc: ["'self'", "data:", "https:"]` - Allow images from HTTPS and data URIs
+    
+    <Warning>
+      `'unsafe-inline'` is used for compatibility. Consider using nonces or hashes in production for stricter security.
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="HTTP Strict Transport Security (HSTS)" icon="lock">
+    Forces browsers to always use HTTPS connections.
+    
+    **Configuration:**
+    - `maxAge: 31536000` - Remember for 1 year (365 days)
+    - `includeSubDomains: true` - Apply to all subdomains
+    - `preload: true` - Eligible for browser HSTS preload lists
+    
+    <Info>
+      HSTS only works when the site is served over HTTPS. In development (HTTP), this header is sent but not enforced.
+    </Info>
+  </Accordion>
+  
+  <Accordion title="X-Frame-Options" icon="window">
+    Prevents clickjacking attacks by controlling iframe embedding.
+    
+    **Default:** `DENY` - Cannot be embedded in any frame
+    
+    To allow embedding from same origin:
+    ```javascript
+    frameguard: { action: 'sameorigin' }
+    ```
+  </Accordion>
+  
+  <Accordion title="X-Content-Type-Options" icon="file-code">
+    Prevents MIME type sniffing attacks.
+    
+    **Value:** `nosniff` - Browser must respect declared Content-Type
+  </Accordion>
+  
+  <Accordion title="Referrer-Policy" icon="arrow-up-right-from-square">
+    Controls how much referrer information is shared.
+    
+    **Default:** `no-referrer` - No referrer information sent
+  </Accordion>
+</AccordionGroup>
+
+## Rate Limiting
+
+### Login Protection
+
+Protects login endpoint from brute force attacks:
+
+```javascript
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    max: 5,                     // Max 5 attempts per window
+    message: {
+        success: false,
+        message: 'Demasiados intentos de login. Por favor, intenta de nuevo en 15 minutos.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+        console.warn(`⚠️  Rate limit excedido para IP: ${req.ip}`);
+        res.status(429).json({
+            success: false,
+            message: 'Demasiados intentos de login. Por favor, intenta de nuevo en 15 minutos.'
+        });
+    }
+});
+
+// Apply to login endpoint
+app.post('/api/login', loginLimiter, (req, res) => { ... });
+```
+
+<ParamField path="windowMs" type="number" default="900000">
+  Time window in milliseconds (15 minutes)
+</ParamField>
+
+<ParamField path="max" type="number" default="5">
+  Maximum number of requests per window
+  
+  <Warning>After 5 failed login attempts, the IP is blocked for 15 minutes</Warning>
+</ParamField>
+
+<ParamField path="standardHeaders" type="boolean" default="true">
+  Send rate limit info in `RateLimit-*` headers:
+  - `RateLimit-Limit`: Maximum requests allowed
+  - `RateLimit-Remaining`: Requests remaining
+  - `RateLimit-Reset`: Time when limit resets
+</ParamField>
+
+### API Rate Limiting
+
+Protects all API endpoints from abuse:
+
+```javascript
+const apiLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000,  // 1 minute
+    max: 100,                  // Max 100 requests per minute
+    message: {
+        success: false,
+        message: 'Demasiadas solicitudes. Por favor, intenta de nuevo más tarde.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Apply to all API routes
+app.use('/api/', apiLimiter);
+```
+
+<Info>Allows 100 requests per minute per IP address</Info>
+
+### Custom Rate Limiting
+
+You can create custom rate limiters for specific endpoints:
+
+```javascript
+const strictLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,  // 5 minutes
+    max: 10,                   // Max 10 requests
+    message: 'Too many requests for this resource'
+});
+
+app.post('/api/admin/sensitive-operation', strictLimiter, handler);
+```
+
+## Session Management
+
+### Session Configuration
+
+```javascript
+const session = require('express-session');
+
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'default-secret-change-in-production',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000,  // 24 hours
+        sameSite: 'strict'
+    }
+}));
+```
+
+### Session Options Explained
+
+<ParamField path="secret" type="string" required>
+  Secret used to sign the session ID cookie
+  
+  <Warning>
+    Must be changed in production! Generate a cryptographically secure random string.
+  </Warning>
+  
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+  ```
+</ParamField>
+
+<ParamField path="resave" type="boolean" default="false">
+  Don't save session if unmodified
+  
+  Setting to `false` improves performance and prevents race conditions.
+</ParamField>
+
+<ParamField path="saveUninitialized" type="boolean" default="false">
+  Don't create session until something is stored
+  
+  Useful for login sessions and reduces server storage usage.
+</ParamField>
+
+### Cookie Security Options
+
+<ParamField path="cookie.secure" type="boolean">
+  Only send cookie over HTTPS
+  
+  **Automatically set based on NODE_ENV:**
+  - `true` in production (requires HTTPS)
+  - `false` in development (allows HTTP)
+</ParamField>
+
+<ParamField path="cookie.httpOnly" type="boolean" default="true">
+  Prevent client-side JavaScript access to cookies
+  
+  <Check>Critical protection against XSS attacks</Check>
+</ParamField>
+
+<ParamField path="cookie.maxAge" type="number" default="86400000">
+  Session lifetime in milliseconds (24 hours)
+  
+  After this time, users must log in again.
+</ParamField>
+
+<ParamField path="cookie.sameSite" type="string" default="strict">
+  CSRF protection via SameSite cookie attribute
+  
+  **Options:**
+  - `strict` - Never send cookie on cross-site requests
+  - `lax` - Send cookie on safe cross-site requests (GET)
+  - `none` - Always send cookie (requires `secure: true`)
+  
+  <Info>Using `strict` provides the strongest CSRF protection</Info>
+</ParamField>
+
+## Password Security
+
+### Bcrypt Hashing
+
+All passwords are hashed using bcrypt with a cost factor of 10:
+
+```javascript
+const bcrypt = require('bcrypt');
+const SALT_ROUNDS = 10;
+
+// Hash password before storing
+const hashedPassword = await bcrypt.hash(plainPassword, SALT_ROUNDS);
+
+// Verify password during login
+const isValid = await bcrypt.compare(plainPassword, hashedPassword);
+```
+
+<AccordionGroup>
+  <Accordion title="Why bcrypt?" icon="key">
+    - **Adaptive:** Can increase cost factor as computers get faster
+    - **Salted:** Each password has a unique salt
+    - **Slow:** Intentionally slow to prevent brute force attacks
+    - **Industry standard:** Widely tested and proven secure
+  </Accordion>
+  
+  <Accordion title="Salt rounds explained" icon="rotate">
+    The cost factor of 10 means 2^10 = 1,024 iterations.
+    
+    **Higher is more secure but slower:**
+    - 10 rounds: ~100ms per hash (current setting)
+    - 12 rounds: ~400ms per hash
+    - 14 rounds: ~1.6s per hash
+    
+    <Info>10 rounds is currently the recommended balance between security and performance</Info>
+  </Accordion>
+</AccordionGroup>
+
+## Environment Validation
+
+### Startup Checks
+
+The application validates critical environment variables on startup:
+
+```javascript
+function validateEnvironmentVariables() {
+    if (!process.env.DB_USER || !process.env.DB_PASSWORD) {
+        console.error('❌ ERROR: Las variables de entorno DB_USER y DB_PASSWORD son requeridas.');
+        console.error('📝 Por favor, configura el archivo .env con las credenciales de la base de datos.');
+        console.error('📄 Puedes usar .env.example como plantilla.');
+        process.exit(1);
+    }
+    console.log('✅ Variables de entorno cargadas correctamente');
+}
+```
+
+<Warning>
+  The application will **not start** if required environment variables are missing.
+</Warning>
+
+## Security Best Practices
+
+### Production Checklist
+
+<Steps>
+  <Step title="Generate SESSION_SECRET">
+    Never use the default session secret:
+    
+    ```bash
+    node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+    ```
+    
+    Add to `.env`:
+    ```env
+    SESSION_SECRET=your_generated_secret_here
+    ```
+  </Step>
+  
+  <Step title="Enable HTTPS">
+    Use HTTPS in production to enable secure cookies and HSTS:
+    
+    ```env
+    NODE_ENV=production
+    ```
+    
+    Configure reverse proxy (nginx/Apache) for SSL termination.
+  </Step>
+  
+  <Step title="Restrict CORS">
+    If using CORS, restrict to specific origins:
+    
+    ```javascript
+    const cors = require('cors');
+    app.use(cors({
+        origin: 'https://yourdomain.com',
+        credentials: true
+    }));
+    ```
+  </Step>
+  
+  <Step title="Monitor rate limit violations">
+    Set up alerts for excessive rate limiting:
+    
+    ```javascript
+    handler: (req, res) => {
+        logger.warn(`Rate limit exceeded: ${req.ip}`);
+        // Send alert to monitoring system
+    }
+    ```
+  </Step>
+  
+  <Step title="Regular security audits">
+    Run security audits regularly:
+    
+    ```bash
+    npm audit
+    npm audit fix
+    ```
+  </Step>
+</Steps>
+
+### Password Requirements
+
+Enforce strong password requirements on the client side:
+
+<CardGroup cols={2}>
+  <Card title="Minimum Length" icon="ruler">
+    At least 8 characters
+  </Card>
+  
+  <Card title="Complexity" icon="puzzle-piece">
+    Mix of uppercase, lowercase, numbers, and symbols
+  </Card>
+  
+  <Card title="No Common Passwords" icon="ban">
+    Reject passwords from common password lists
+  </Card>
+  
+  <Card title="Regular Rotation" icon="rotate">
+    Encourage password changes every 90 days
+  </Card>
+</CardGroup>
+
+### SQL Injection Prevention
+
+Always use parameterized queries:
+
+<CodeGroup>
+```javascript ✅ Secure - Parameterized
+const result = await pool.request()
+    .input('email', sql.NVarChar, userEmail)
+    .query('SELECT * FROM Usuarios WHERE Email = @email');
+```
+
+```javascript ❌ Vulnerable - String Concatenation
+// NEVER DO THIS
+const query = `SELECT * FROM Usuarios WHERE Email = '${userEmail}'`;
+const result = await pool.request().query(query);
+```
+</CodeGroup>
+
+### XSS Prevention
+
+<AccordionGroup>
+  <Accordion title="Sanitize user input" icon="broom">
+    Always sanitize and validate user input:
+    
+    ```javascript
+    const sanitizeHtml = require('sanitize-html');
+    
+    const clean = sanitizeHtml(userInput, {
+        allowedTags: [],
+        allowedAttributes: {}
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Use CSP headers" icon="shield">
+    Content Security Policy is already configured via Helmet.
+  </Accordion>
+  
+  <Accordion title="Escape output" icon="code">
+    Always escape data when rendering:
+    
+    ```javascript
+    // In templates
+    <div>{{escapeHtml(userData)}}</div>
+    
+    // In JavaScript
+    element.textContent = userData; // Safe
+    element.innerHTML = userData;   // Unsafe
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Security Headers Reference
+
+### Headers Set by Helmet
+
+| Header | Value | Purpose |
+|--------|-------|----------|
+| `Content-Security-Policy` | Custom directives | Prevent XSS attacks |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains; preload` | Force HTTPS |
+| `X-Content-Type-Options` | `nosniff` | Prevent MIME sniffing |
+| `X-Frame-Options` | `DENY` | Prevent clickjacking |
+| `X-Download-Options` | `noopen` | Prevent file execution |
+| `X-DNS-Prefetch-Control` | `off` | Control DNS prefetching |
+| `Referrer-Policy` | `no-referrer` | Protect referrer info |
+
+### Rate Limit Headers
+
+| Header | Description |
+|--------|-------------|
+| `RateLimit-Limit` | Maximum requests allowed in window |
+| `RateLimit-Remaining` | Requests remaining in current window |
+| `RateLimit-Reset` | Time when the limit resets (Unix timestamp) |
+| `Retry-After` | Seconds to wait before retrying (when limited) |
+
+## Monitoring and Logging
+
+### Security Events
+
+The audit system logs all security-relevant events:
+
+<CodeGroup>
+```javascript Login Events
+// Successful login
+{
+    TipEvento: 'LOGIN',
+    Descripcion: 'Usuario inició sesión',
+    Usuario: 'user@example.com',
+    IpAddress: '192.168.1.100',
+    Severidad: 'Info'
+}
+
+// Failed login
+{
+    TipEvento: 'LOGIN_FAILED',
+    Descripcion: 'Intento de login fallido',
+    Usuario: 'user@example.com',
+    IpAddress: '192.168.1.100',
+    Severidad: 'Warning'
+}
+```
+
+```javascript Rate Limit Events
+// Rate limit exceeded
+console.warn(`⚠️  Rate limit excedido para IP: ${req.ip}`);
+
+{
+    TipEvento: 'RATE_LIMIT',
+    Descripcion: 'Rate limit exceeded',
+    IpAddress: '192.168.1.100',
+    Severidad: 'Warning'
+}
+```
+</CodeGroup>
+
+### Security Monitoring Dashboard
+
+Monitor these metrics:
+
+- Failed login attempts per IP
+- Rate limit violations
+- Session creation/destruction rate
+- Unusual access patterns
+- SQL errors (potential injection attempts)
+
+## Troubleshooting
+
+### Rate limit too strict
+
+<Tabs>
+  <Tab title="Symptom">
+    Legitimate users being blocked due to rate limiting.
+  </Tab>
+  
+  <Tab title="Solution">
+    Adjust rate limit thresholds in `middleware/security.js`:
+    
+    ```javascript
+    const apiLimiter = rateLimit({
+        windowMs: 1 * 60 * 1000,
+        max: 200,  // Increase from 100 to 200
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### Sessions not persisting
+
+<Tabs>
+  <Tab title="Symptom">
+    Users logged out on page refresh or after short time.
+  </Tab>
+  
+  <Tab title="Solutions">
+    1. Verify `SESSION_SECRET` is set in `.env`
+    2. Check browser is accepting cookies
+    3. If using HTTPS, ensure `secure: true` is set
+    4. Increase `cookie.maxAge` for longer sessions:
+       ```javascript
+       maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days
+       ```
+  </Tab>
+</Tabs>
+
+### CSP blocking resources
+
+<Tabs>
+  <Tab title="Symptom">
+    Browser console shows CSP violation errors.
+  </Tab>
+  
+  <Tab title="Solution">
+    Add allowed domains to CSP directives:
+    
+    ```javascript
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "https://cdn.example.com"],
+            styleSrc: ["'self'", "https://fonts.googleapis.com"],
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/configuration/environment-variables">
+    Configure SESSION_SECRET and other security settings
+  </Card>
+  
+  <Card title="Database Setup" icon="database" href="/configuration/database-setup">
+    Secure database connection configuration
+  </Card>
+</CardGroup>

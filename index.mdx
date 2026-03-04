@@ -1,97 +1,216 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: DitzlerTotes Documentation
+description: Complete tote container management system with traceability, auditing, and role-based access control
+mode: custom
 ---
 
-## Setting up
+<div className="relative overflow-hidden dark:bg-[#0f1117] bg-white py-20">
+  <div className="max-w-6xl mx-auto px-6">
+    <div className="grid lg:grid-cols-2 gap-12 items-center">
+      <div>
+        <h1 className="text-5xl lg:text-6xl font-bold dark:text-white text-gray-900 mb-6">
+          Welcome to DitzlerTotes Documentation
+        </h1>
+        <p className="text-xl dark:text-gray-400 text-gray-600 mb-8 max-w-2xl">
+          Full-stack tote container management system with complete traceability, centralized auditing, and role-based access control for production environments.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 rounded-lg font-semibold transition-colors bg-[#6c757d] text-white hover:bg-[#5a6268]"
+          >
+            Get Started
+            <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+          <a 
+            href="/api/overview" 
+            className="inline-flex items-center px-6 py-3 rounded-lg font-semibold transition-colors border dark:border-gray-700 border-gray-300 dark:bg-white/5 bg-gray-50 dark:text-white text-gray-900 dark:hover:bg-white/10 hover:bg-gray-100"
+          >
+            Explore API Reference
+          </a>
+        </div>
+      </div>
+      <div className="hidden lg:block">
+        <div className="dark:bg-[#1a1d27] bg-gray-50 rounded-2xl p-8 dark:border-[#27272a] border-gray-200 border">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg dark:bg-[#242838] bg-gray-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-[#17a2b8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+              </div>
+              <div>
+                <div className="font-semibold dark:text-white text-gray-900">Secure & Audited</div>
+                <div className="text-sm dark:text-gray-400 text-gray-600">Complete audit trail for all operations</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg dark:bg-[#242838] bg-gray-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-[#17a2b8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <div>
+                <div className="font-semibold dark:text-white text-gray-900">Multi-Role Support</div>
+                <div className="text-sm dark:text-gray-400 text-gray-600">Granular permissions for different users</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg dark:bg-[#242838] bg-gray-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-[#17a2b8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <div>
+                <div className="font-semibold dark:text-white text-gray-900">Real-Time Tracking</div>
+                <div className="text-sm dark:text-gray-400 text-gray-600">Live dashboard with KPIs and metrics</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold dark:text-white text-gray-900 mb-4">Quick Start</h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">Get DitzlerTotes up and running in minutes</p>
+  
+  <Steps>
+    <Step title="Install Dependencies">
+      Clone the repository and install the required packages:
+      
+      ```bash
+      git clone https://github.com/Dicip/DitzlerTotesDB.git
+      cd DitzlerTotesDB
+      npm install
+      ```
+    </Step>
+    
+    <Step title="Configure Environment">
+      Create a `.env` file with your database credentials:
+      
+      ```bash
+      DB_USER=your_sql_user
+      DB_PASSWORD=your_sql_password
+      DB_DATABASE=Ditzler
+      DB_SERVER=localhost
+      DB_PORT=1433
+      PORT=3000
+      SESSION_SECRET=your_secret_key_here
+      ```
+      
+      <Tip>Generate a secure session secret using: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"`</Tip>
+    </Step>
+    
+    <Step title="Set Up Database">
+      Run the database setup script to create tables and stored procedures:
+      
+      ```sql
+      -- Execute in SQL Server Management Studio
+      USE master;
+      GO
+      -- Run the master installation script
+      -- Located at: database/00_Master_Install.sql
+      ```
+    </Step>
+    
+    <Step title="Start the Server">
+      Launch the application:
+      
+      ```bash
+      npm start
+      ```
+      
+      The server will start at `http://localhost:3000`. Default credentials:
+      - Email: `admin@ditzler.com`
+      - Password: `admin123`
+      
+      <Warning>Change default credentials in production environments</Warning>
+    </Step>
+  </Steps>
+</div>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold dark:text-white text-gray-900 mb-4">Explore by Feature</h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">Discover what DitzlerTotes can do for your operation</p>
+  
+  <CardGroup cols={3}>
+    <Card title="Dashboard" icon="chart-line" href="/features/dashboard">
+      Real-time KPIs, metrics, and operational insights at a glance
+    </Card>
+    <Card title="Tote Management" icon="box" href="/features/tote-management">
+      Complete lifecycle tracking from creation to disposal
+    </Card>
+    <Card title="User Management" icon="users" href="/features/user-management">
+      Multi-role authentication with granular permissions
+    </Card>
+    <Card title="Client Management" icon="building" href="/features/client-management">
+      Track customer information and tote assignments
+    </Card>
+    <Card title="Operator Interfaces" icon="display" href="/features/operator-interfaces">
+      Specialized workflows for filling, dispatch, and tote operations
+    </Card>
+    <Card title="Audit System" icon="clipboard-check" href="/features/audit-system">
+      Centralized logging with IP tracking and complete traceability
+    </Card>
+  </CardGroup>
+</div>
 
-## Make it yours
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold dark:text-white text-gray-900 mb-4">Core Concepts</h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">Understand the architecture and key concepts behind DitzlerTotes</p>
+  
+  <CardGroup cols={2}>
+    <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+      Learn about the modular Express.js backend and SQL Server database
+    </Card>
+    <Card title="Roles & Permissions" icon="lock" href="/concepts/roles-and-permissions">
+      Understand the role-based access control system
+    </Card>
+    <Card title="Multi-Role Support" icon="user-group" href="/concepts/multi-role-support">
+      How users can have multiple roles simultaneously
+    </Card>
+    <Card title="Tote Lifecycle" icon="rotate" href="/concepts/tote-lifecycle">
+      Track totes through their complete lifecycle stages
+    </Card>
+  </CardGroup>
+</div>
 
-Design a docs site that looks great and empowers your users.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold dark:text-white text-gray-900 mb-4">Operator Guides</h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">Step-by-step guides for daily operations</p>
+  
+  <CardGroup cols={3}>
+    <Card title="Filling Operator" icon="fill-drip" href="/operators/filling-operator">
+      Fill empty totes with products and register weights
+    </Card>
+    <Card title="Tote Operator" icon="dolly" href="/operators/tote-operator">
+      Move totes between locations and update status
+    </Card>
+    <Card title="Dispatch Operator" icon="truck" href="/operators/dispatch-operator">
+      Prepare and manage tote dispatches to clients
+    </Card>
+  </CardGroup>
+</div>
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
-
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="dark:bg-[#1a1d27] bg-gray-50 rounded-2xl p-8 dark:border-[#27272a] border-gray-200 border text-center">
+    <h2 className="text-3xl font-semibold dark:text-white text-gray-900 mb-4">Ready to Get Started?</h2>
+    <p className="text-base dark:text-gray-400 text-gray-600 mb-6 max-w-2xl mx-auto">
+      Follow our quickstart guide to set up DitzlerTotes in your production environment
+    </p>
+    <a 
+      href="/quickstart" 
+      className="inline-flex items-center px-6 py-3 rounded-lg font-semibold transition-colors bg-[#6c757d] text-white hover:bg-[#5a6268]"
+    >
+      View Quickstart Guide
+      <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    </a>
+  </div>
+</div>
